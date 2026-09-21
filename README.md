@@ -1,74 +1,79 @@
-> [!CAUTION]
-> **因斗鱼要求，2026-8-7起，DouyuEx 插件将无限期停止更新与发布，并关闭所有下载渠道。**
+# douyuEx_simplified
 
-<p align="center">
-    <a href="https://github.com/qianjiachun/douyuEx">
-        <img src="https://s4.ax1x.com/2021/12/23/TGMxk8.png" width="150" height="150"/>
-    </a>
-    <h3 align="center">DouyuEx</h3>
-    <br>
-    <p align="center">
-        <a href="https://github.com/qianjiachun/douyuEx"><img src="https://img.shields.io/github/languages/code-size/qianjiachun/douyuEx?color=blueviolet"></a>
-        <a href="https://github.com/qianjiachun/douyuEx"><img src="https://img.shields.io/github/stars/qianjiachun/douyuEx?color=green"></a>
-        <a href="https://github.com/qianjiachun/douyuEx"><img src="https://img.shields.io/github/commit-activity/m/qianjiachun/douyuEx?color=9cf"></a>
-        <a href="https://github.com/qianjiachun/douyuEx"><img src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
-    </p>
-    <p align="center">
-       Powerful Plugin For DouyuWeb<br>
-    </p>
-</p>
+基于 [小淳的 DouyuEx](https://github.com/qianjiachun/douyuEx) 提取功能、独立维护的斗鱼直播间增强脚本，运行于 Tampermonkey。
 
-> `DouyuEx` 是基于 `原生JavaScript` 开发的 `TamperMonkey` 插件，用于增强斗鱼Web端体验。`DouyuEx` 集合斗鱼全端的特色功能，增强原生网页，复杂的操作一键完成，给用户沉浸式的直播体验。代码**开源**，功能**实用**，交互**友好**，不过度改变网页本来的结构，所有功能都在用户可控范围之内。
+原作者已停止维护，本仓库按个人观看需求逐步精简。原版源码保留作参考，实际使用和维护的脚本位于 [simplified/douyuEx_simplified.user.js](simplified/douyuEx_simplified.user.js)。
 
-## DouyuEx-斗鱼直播间增强插件
+**当前版本：1.3.1**。无需安装 npm 依赖或编译，没有外部库、统计代码或脚本自身发起的网络请求。
 
-## 🌐 官方网站
+## 当前功能
 
-[https://www.douyuex.com/](https://www.douyuex.com/)
+油猴菜单中只有三个开关，默认开启，切换后刷新页面生效：
 
+| 开关 | 效果 |
+| --- | --- |
+| 自动网页全屏 | 进入直播间后自动点击网页全屏按钮，让播放器铺满网页区域 |
+| 自动最高画质 | 自动选择播放器画质列表的第一项，沿用原版最高画质排序约定 |
+| 简洁模式 | 统一控制下列六项页面整理效果 |
 
-### 🎯 目标
-1. 旨在扩展增强原版功能，优化用户体验
-2. 安全，不做用户可控范围外的功能
-3. 纯粹，不过分影响本来的网页功能
-4. 不污染页面的结构
-5. 使用简单，架构轻量，功能实用，交互友好
-6. 集合移动端、客户端、web端特色功能
-7. 原生代码，开发架构易扩展，易维护
+简洁模式包含：
 
-### 📦 安装
-1. [安装油猴脚本](https://www.crx4chrome.com/crx/1429/)，选择【Download crx file from crx4chrome】，将下载后的文件拖入浏览器进行安装，此步有问题的可以百度
-2. 点击上方的安装脚本，安装本插件，若出现缺少";"的提示框，无视即可
-3. 安装后，在礼物栏下方/鱼丸鱼翅左方会出现一个精灵球图标，点击显示功能条
-- 插件基于TamperMonkey V4.10开发，若插件有无法使用的情况，请尝试[升级油猴版本](https://www.crx4chrome.com/crx/1429/)
-- 若出现提示是否允许跨域访问的页面，一律选择**始终允许**即可
+- **隐藏礼物栏**，扩展视频区域，并隐藏相关 PK、点赞浮层，保留视频播放控制栏。
+- **拉高弹幕框**，隐藏日榜/周榜和房间活动区域。
+- **隐藏弹幕前缀**，包括粉丝牌、贵族和用户等级图标，保留昵称与正文。
+- **屏蔽进场弹幕**，隐藏弹幕框底部的进场信息区域。
+- **屏蔽弹幕背景**，去掉匹配的背景、装饰图片和特效前缀。
+- **隐藏广告与推广**，包括横幅、浮动广告、二维码、游戏推广和活动引导等。
 
-### 🚀 声明
-- 本插件是本人课余兴趣开发，代码质量请勿吐槽
-- 代码可供互联网的同好们参考研究，**引用请注明出处**
-- 喜欢本插件的用户不妨点一下收藏或推荐给朋友，有建议或BUG请提交在greasyfork或github
-- 本插件仅为提高日常观看体验，不做薅羊毛/恶性竞争等功能
-- 作者：小淳 / QQ：189964430 / 交流Q群：977387881
+这六项一起开启或关闭，不再提供分项开关。原版的签到、送礼、账号切换、画中画等功能尚未加入精简脚本。
 
-### 💎功能
-[功能介绍](https://html.douyuex.com/introduction/)
+## 安装与更新
 
---------------------------------------------------
+1. 在浏览器中安装并启用 Tampermonkey。
+2. 打开 [脚本源码](simplified/douyuEx_simplified.user.js)，点击 **Raw** 获取完整内容。也可直接打开 [原始脚本文件](https://raw.githubusercontent.com/wyq81956/douyuEx_simplified/master/simplified/douyuEx_simplified.user.js)；若油猴弹出安装页，按提示安装。
+3. 若没有弹出安装页，在油猴中新建脚本，用完整源码替换默认内容并保存。
+4. **停用原版 DouyuEx 和其他重复安装的精简版**，再刷新斗鱼直播间，避免重复触发全屏切换。
+5. 点击浏览器中的油猴图标，切换“自动网页全屏”“自动最高画质”或“简洁模式”，然后刷新生效。
 
-## 📕更新内容
-[更新内容](https://html.douyuex.com/update/)
+更新时用最新代码覆盖油猴中已有的精简脚本并保存，不要额外启用第二份。当前没有内置更新检查服务，按上述方式手动更新。
 
---------------------------------------------------
+从旧版升级到 1.3.x 时，自动全屏和最高画质设置会保留；合并后的简洁模式默认开启，旧的六个分项设置不再参与判断。
 
-## ⚙如何维护与编译
-[项目地址](https://github.com/qianjiachun/douyuEx)
+## 实现与适用范围
 
-1. 在`./src`下修改代码
-2. `npm run build`
-3. 把`./dist/douyuex.js`的代码复制到tampermonkey中去
+- 脚本匹配 `www.douyu.com`，检测到直播播放器的 video 节点后执行；不是鱼吧或点播站的全站增强脚本。
+- 自动全屏和最高画质每秒检查一次，最多尝试 100 次，找到目标后停止，不持续覆盖用户后续手动选择。
+- 简洁模式注入一份 CSS，后续加载的匹配元素也会被隐藏。广告隐藏是 **CSS 隐藏页面元素**，不会阻止广告请求、下载或执行。
+- 最高画质只选择网页提供的选项，不绕过登录或付费权限。
+- 页面适配依赖斗鱼的 DOM 类名；网页改版后可能需要更新选择器。部分全屏布局规则使用 CSS `:has()`，需要支持它的浏览器。
+- 已进行 JavaScript 语法和模拟逻辑检查，尚未完成实际斗鱼页面的完整验证。
 
+## 自行维护
 
+直接修改 [精简脚本](simplified/douyuEx_simplified.user.js)，再将完整代码同步到油猴。**精简版不使用原项目的 `npm run build`**，该命令仍对应保留的原版构建流程。
 
-> [如何编译与维护（已过期）](https://qianjiachun.github.io/DouyuEx/compile)
+新增广告隐藏规则时，在脚本的 `applySimpleMode()` 中找到广告/推广 CSS 列表，添加实际元素的选择器，例如：
 
---------------------------------------------------
+```css
+/* 示例：需替换成通过开发者工具确认的广告容器类名 */
+.NewPromotionBanner { display: none !important; }
+```
+
+先在浏览器开发者工具中确认隐藏的是广告容器，避免使用 `img`、`.container` 等范围过大的选择器。规则随“简洁模式”一起生效。
+
+## 仓库结构
+
+| 路径 | 用途 |
+| --- | --- |
+| [simplified/douyuEx_simplified.user.js](simplified/douyuEx_simplified.user.js) | 当前可安装的精简版脚本 |
+| [simplified/README.md](simplified/README.md) | 精简版实现与使用说明 |
+| [simplified/FEATURE-INVENTORY.md](simplified/FEATURE-INVENTORY.md) | 原版可拆分功能清单、依赖和接入状态，供后续选取功能 |
+| [src/](src/) | 保留的原版源码 |
+| [build.js](build.js)、[package.json](package.json) | 保留的原版构建入口和依赖配置 |
+| [docs/README.upstream.md](docs/README.upstream.md) | 原版 README 存档，包含原作者停更公告与历史说明 |
+
+## 来源
+
+原始功能来自 [qianjiachun/douyuEx](https://github.com/qianjiachun/douyuEx)，作者 **小淳**。感谢原作者的开源工作。
+
+本仓库是独立维护的精简分支，与原版发布渠道区分。原版说明中的官网、安装渠道及维护状态属于历史信息，当前功能以本页和精简脚本为准。
