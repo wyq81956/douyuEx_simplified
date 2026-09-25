@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         DouyuEx 精简版 - 播放器与简洁模式
-// @namespace    douyuex-simplified
-// @version      1.4.0
+// @name         DouyuEx 精简版 Beta - 快速最高画质
+// @namespace    douyuex-simplified-beta
+// @version      1.4.0-beta.1
 // @description  自动网页全屏、最高画质、简洁模式；屏蔽进场弹幕、弹幕背景和前缀，隐藏广告。
 // @author       原始功能：小淳；精简版：本地维护
 // @match        *://www.douyu.com/*
@@ -43,7 +43,7 @@
         waitForPlayerAction(enterWebFullscreen);
     }
     if (GM_getValue(SETTINGS.quality, true)) {
-        startHighestQuality();
+        startHighestQualityBeta();
     }
 
     function registerToggle(label, key) {
@@ -171,7 +171,7 @@
         return true;
     }
 
-    function startHighestQuality() {
+    function startHighestQualityBeta() {
         const started = performance.now();
         const RETRY_GAP = 2000;
         const CONFIRM_TIME = 2000;
@@ -186,7 +186,7 @@
         let observedRoot = null;
 
         function log(message) {
-            console.info(`[DouyuEx 画质 +${((performance.now() - started) / 1000).toFixed(2)}s] ${message}`);
+            console.info(`[DouyuEx Beta 画质 +${((performance.now() - started) / 1000).toFixed(2)}s] ${message}`);
         }
 
         function findOption() {
