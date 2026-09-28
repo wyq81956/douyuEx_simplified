@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DouyuEx 精简版 - 播放器与简洁模式
 // @namespace    douyuex-simplified
-// @version      1.4.1
+// @version      1.4.2
 // @description  自动网页全屏、最高画质、简洁模式；屏蔽进场弹幕、弹幕背景和前缀，隐藏广告。
 // @author       原始功能：小淳；精简版：本地维护
 // @match        *://www.douyu.com/*
@@ -158,7 +158,8 @@
             .CloseVideoPlayerAd, .IconCardAdBoundsBox, .room-top-banner-box,
             .LadderNav, #js-bottom-right-recommendAd, .aside-top-uspension-box,
             .werbungContainer__2sv7h, #js-player-asideTopSuspension,
-            .Search-Panel-Advert, .DiamondThanksgivingPushGameDialog { display: none !important; }
+            .Search-Panel-Advert, .DiamondThanksgivingPushGameDialog,
+            .RechangeJulyPopups { display: none !important; }
             /* 填补弹幕区顶部广告隐藏后的空位。 */
             #js-player-asideMain { top: 0 !important; }
         `);
