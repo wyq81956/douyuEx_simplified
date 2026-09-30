@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         DouyuEx 精简版 - 播放器与简洁模式
-// @namespace    douyuex-simplified
-// @version      1.5.1
+// @name         DouyuEx 精简版 - 弹幕池拖动 Beta
+// @namespace    douyuex-simplified-resize-beta
+// @version      1.6.0-beta.1
 // @description  自动网页全屏、最高画质、简洁模式；屏蔽刀塔助手，隐藏广告和弹幕装饰，拖动调整弹幕池宽度。
 // @author       原始功能：小淳；精简版：本地维护
 // @match        *://www.douyu.com/*
