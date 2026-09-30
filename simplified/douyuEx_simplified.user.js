@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         DouyuEx 精简版 - 播放器与简洁模式
 // @namespace    douyuex-simplified
-// @version      1.4.2
-// @description  自动网页全屏、最高画质、简洁模式；屏蔽进场弹幕、弹幕背景和前缀，隐藏广告。
+// @version      1.5.0
+// @description  自动网页全屏、最高画质、简洁模式；屏蔽刀塔助手，隐藏广告和弹幕装饰。
 // @author       原始功能：小淳；精简版：本地维护
 // @match        *://www.douyu.com/*
 // @run-at       document-end
@@ -25,6 +25,7 @@
         fullscreen: "autoPlayer.fullscreen",
         quality: "autoPlayer.highestQuality",
         simpleMode: "simpleMode.enabled",
+        blockDotaHelper: "dotaHelper.blocked",
     };
     const RETRY_INTERVAL = 1000;
     const MAX_ATTEMPTS = 100;
@@ -32,6 +33,11 @@
     registerToggle("自动网页全屏", SETTINGS.fullscreen);
     registerToggle("自动最高画质", SETTINGS.quality);
     registerToggle("简洁模式", SETTINGS.simpleMode);
+    registerToggle("屏蔽刀塔助手", SETTINGS.blockDotaHelper);
+
+    if (GM_getValue(SETTINGS.blockDotaHelper, true)) {
+        waitForPlayerAction(blockDotaHelper);
+    }
 
     // 合并后的开关默认开启，旧版六个分项设置不再参与判断。
     if (GM_getValue(SETTINGS.simpleMode, true)) {
@@ -76,6 +82,27 @@
         // 已经网页全屏时避免再次点击而退出。
         const description = [button.title, button.getAttribute("aria-label"), button.getAttribute("data-title"), button.textContent].filter(Boolean).join(" ");
         if (!/退出.*(网页|页面)全屏/.test(description)) button.click();
+        return true;
+    }
+
+    function blockDotaHelper() {
+        if (document.getElementById("douyuex-block-dota-helper-style")) return true;
+        const style = document.createElement("style");
+        style.id = "douyuex-block-dota-helper-style";
+        // 9999 直播间 DOM 与播放器 gameHotArea/GameTips.js 核对的专用类名。
+        // 隐藏整个技能/物品热区，避免鼠标进入后触发弹窗；CSS 覆盖后续重建。
+        // 不隐藏播放器外壳、控制栏、DotaFirstPerson 或 Dota2AnchorGameData。
+        style.textContent = `
+            .tooltips-385829,
+            .herosTooltips-16138a,
+            .herosTooltipsPopover-93e2e9,
+            .Dota2TipsDialog,
+            .InteractItem[dataid="Dota2NewEntrance"] {
+                display: none !important;
+                pointer-events: none !important;
+            }
+        `;
+        document.head.appendChild(style);
         return true;
     }
 
