@@ -36,6 +36,7 @@ class Node {
 function boot({ saved = null, enabled = true, missing = false, original = '' } = {}) {
     const values = { 'autoPlayer.fullscreen': false, 'autoPlayer.highestQuality': false,
         'simpleMode.enabled': false, 'dotaHelper.blocked': false,
+        'player.volumeWheel': false, 'player.noCloseJump': false,
         'barrageResize.enabled': enabled, 'barrageResize.width': saved };
     const timers = new Map(), frames = new Map(), menus = new Map(), observers = [];
     let serial = 0, size = 1200, visible = true, layout;
@@ -81,6 +82,7 @@ function drag(h, delta, finish = 'pointerup') {
     h.emit(finish);
 }
 const t = boot(), h = t.handle();
+assert.deepEqual([...t.menus.keys()], ['DouyuEx 设置']);
 assert.equal(t.width(), 380); assert.equal(h.hidden, false);
 drag(h, 100); assert.equal(t.width(), 480); assert.equal(t.values['barrageResize.width'], 480);
 drag(h, -1000); assert.equal(t.width(), 220);

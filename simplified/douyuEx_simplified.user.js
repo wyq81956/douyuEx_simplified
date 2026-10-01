@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         DouyuEx 精简版 - 播放器与简洁模式
 // @namespace    douyuex-simplified
-// @version      1.5.1
-// @description  自动网页全屏、最高画质、简洁模式；屏蔽刀塔助手，隐藏广告和弹幕装饰，拖动调整弹幕池宽度。
+// @version      1.5.3
+// @description  自动网页全屏、最高画质、简洁模式；屏蔽刀塔助手、拖动调整弹幕池、滚轮调音量、下播不跳转。
 // @author       原始功能：小淳；精简版：本地维护
 // @match        *://www.douyu.com/*
 // @run-at       document-end
@@ -17,6 +17,8 @@
 // src/packages/Refresh/Refresh_{Video,BarrageFrame,Barrage}.js
 // src/packages/Shield/Remove{Enter,DanmakuBackground}.js
 // src/packages/RemoveAD/RemoveAD.js
+// src/packages/VolumeMouseScrolling/VolumeMouseScrolling.{js,css}
+// src/packages/DisableCloseJump/DisableCloseJump.js
 // 保留原版按钮选择逻辑；独立设置、有限重试，不依赖原版面板。
 (function () {
     "use strict";
@@ -28,16 +30,18 @@
         blockDotaHelper: "dotaHelper.blocked",
         resizeBarrage: "barrageResize.enabled",
         barrageWidth: "barrageResize.width",
+        volumeWheel: "player.volumeWheel",
+        noCloseJump: "player.noCloseJump",
     };
     const RETRY_INTERVAL = 1000;
     const MAX_ATTEMPTS = 100;
 
-    registerToggle("自动网页全屏", SETTINGS.fullscreen);
-    registerToggle("自动最高画质", SETTINGS.quality);
-    registerToggle("简洁模式", SETTINGS.simpleMode);
-    registerToggle("屏蔽刀塔助手", SETTINGS.blockDotaHelper);
-    registerToggle("拖动调整弹幕池", SETTINGS.resizeBarrage);
-    if (GM_getValue(SETTINGS.resizeBarrage, true)) startBarrageResize();
+    let settingsDialog = null;
+    let resetBarrageWidth = () => GM_setValue(SETTINGS.barrageWidth, null);
+    GM_registerMenuCommand("DouyuEx 设置", openSettings);
+    if (GM_getValue(SETTINGS.resizeBarrage, true)) resetBarrageWidth = startBarrageResize();
+    if (GM_getValue(SETTINGS.volumeWheel, true)) startVolumeWheel();
+    if (GM_getValue(SETTINGS.noCloseJump, true)) startNoCloseJump();
 
     if (GM_getValue(SETTINGS.blockDotaHelper, true)) {
         waitForPlayerAction(blockDotaHelper);
@@ -56,12 +60,134 @@
         startHighestQuality();
     }
 
-    function registerToggle(label, key) {
-        const enabled = GM_getValue(key, true);
-        GM_registerMenuCommand(`${enabled ? "✓" : "✗"} ${label}（切换后刷新生效）`, () => {
-            GM_setValue(key, !GM_getValue(key, true));
-            // 不自动刷新，以免打断当前观看；刷新后菜单同步新状态。
+    function openSettings() {
+        if (settingsDialog?.open) { settingsDialog.focus(); return; }
+        // 按需创建，Shadow DOM 隔离网站样式；原生 dialog 负责置顶、焦点和 Esc。
+        const host = document.createElement("div");
+        host.id = "douyuex-settings-host";
+        const shadow = host.attachShadow({ mode: "open" });
+        shadow.innerHTML = `
+            <style>
+                :host { all: initial; }
+                * { box-sizing: border-box; }
+                dialog {
+                    padding: 0; border: 1px solid #e5e7eb; border-radius: 16px;
+                    width: min(440px, calc(100vw - 24px)); max-height: calc(100dvh - 32px);
+                    margin: auto; background: #fff; color: #202124;
+                    font: 14px/1.5 system-ui, "Microsoft YaHei", sans-serif;
+                    box-shadow: 0 16px 60px #0004; color-scheme: light;
+                }
+                dialog::backdrop { background: #0007; }
+                .panel { display: flex; flex-direction: column; max-height: calc(100dvh - 34px); }
+                header { padding: 22px 24px 14px; flex-shrink: 0; }
+                h2 { margin: 0 0 4px; font-size: 20px; font-weight: 650; }
+                p { margin: 0; color: #687078; font-size: 12px; }
+                .options { padding: 0 24px; overflow-y: auto; overscroll-behavior: contain; }
+                .option {
+                    display: flex; align-items: center; justify-content: space-between;
+                    gap: 20px; padding: 12px 0; border-bottom: 1px solid #f0f1f2; cursor: pointer;
+                }
+                .name { display: block; font-weight: 550; }
+                .hint { display: block; margin-top: 2px; color: #687078; font-size: 12px; }
+                input {
+                    appearance: none; flex: 0 0 38px; width: 38px; height: 22px;
+                    margin: 0; border: 0; border-radius: 12px; background: #c6cbd0;
+                    position: relative; cursor: pointer;
+                }
+                input::after {
+                    content: ''; position: absolute; width: 16px; height: 16px;
+                    top: 3px; left: 3px; border-radius: 50%; background: #fff;
+                }
+                input:checked { background: #e95018; }
+                input:checked::after { left: 19px; }
+                :focus-visible { outline: 2px solid #d7440d; outline-offset: 3px; }
+                .tools { padding: 14px 24px 0; flex-shrink: 0; }
+                .reset { color: #b43d12; background: transparent; border: 0; padding: 0; }
+                .status { min-height: 20px; margin-top: 4px; }
+                footer {
+                    display: flex; justify-content: flex-end; gap: 10px;
+                    padding: 12px 24px 20px; flex-shrink: 0;
+                }
+                button { font: inherit; cursor: pointer; border-radius: 8px; padding: 8px 14px; }
+                .cancel { border: 1px solid #d9dde1; color: #40454a; background: #fff; }
+                .save { border: 1px solid #e95018; color: #fff; background: #e95018; }
+            </style>
+            <dialog aria-labelledby="settings-title" aria-describedby="settings-description">
+                <div class="panel">
+                    <header>
+                        <h2 id="settings-title">DouyuEx 设置</h2>
+                        <p id="settings-description">调整后点击“保存并刷新”，使开关生效。</p>
+                    </header>
+                    <div class="options"></div>
+                    <div class="tools">
+                        <button type="button" class="reset">恢复弹幕池默认宽度</button>
+                        <p class="status" role="status" aria-live="polite"></p>
+                    </div>
+                    <footer>
+                        <button type="button" class="cancel">取消</button>
+                        <button type="button" class="save">保存并刷新</button>
+                    </footer>
+                </div>
+            </dialog>
+        `;
+        const options = [
+            ["自动网页全屏", SETTINGS.fullscreen, "进入直播间时铺满网页区域"],
+            ["自动最高画质", SETTINGS.quality, "自动选择画质列表第一项"],
+            ["简洁模式", SETTINGS.simpleMode, "隐藏礼物、广告与弹幕装饰"],
+            ["屏蔽刀塔助手", SETTINGS.blockDotaHelper, "隐藏技能、物品的悬停描述"],
+            ["拖动调整弹幕池", SETTINGS.resizeBarrage, "拖动分隔线，松手保存宽度"],
+            ["滚轮调音量", SETTINGS.volumeWheel, "音量控件上滚动，每次增减 5%"],
+            ["下播不跳转", SETTINGS.noCloseJump, "关闭下播推荐弹窗，留在当前房间"],
+        ];
+        const inputs = new Map();
+        const list = shadow.querySelector(".options");
+        for (const [label, key, hint] of options) {
+            const row = document.createElement("label");
+            row.className = "option";
+            const text = document.createElement("span");
+            const name = document.createElement("span");
+            name.className = "name";
+            name.textContent = label;
+            const detail = document.createElement("span");
+            detail.className = "hint";
+            detail.textContent = hint;
+            text.append(name, detail);
+            const input = document.createElement("input");
+            input.type = "checkbox";
+            input.setAttribute("role", "switch");
+            input.setAttribute("aria-label", label);
+            input.checked = !!GM_getValue(key, true);
+            row.append(text, input);
+            list.appendChild(row);
+            inputs.set(key, input);
+        }
+        const dialog = shadow.querySelector("dialog");
+        const status = shadow.querySelector(".status");
+        settingsDialog = dialog;
+        function dismiss() { dialog.close(); }
+        dialog.addEventListener("close", () => {
+            settingsDialog = null;
+            window.removeEventListener("pagehide", dismiss);
+            host.remove();
+        }, { once: true });
+        dialog.addEventListener("click", event => {
+            if (event.target !== dialog) return;
+            const rect = dialog.getBoundingClientRect();
+            if (event.clientX < rect.left || event.clientX > rect.right
+                || event.clientY < rect.top || event.clientY > rect.bottom) dismiss();
         });
+        shadow.querySelector(".cancel").addEventListener("click", dismiss);
+        shadow.querySelector(".reset").addEventListener("click", () => {
+            resetBarrageWidth();
+            status.textContent = "弹幕池宽度已恢复；开关仍需保存。";
+        });
+        shadow.querySelector(".save").addEventListener("click", () => {
+            for (const [key, input] of inputs) GM_setValue(key, input.checked);
+            window.location.reload();
+        });
+        window.addEventListener("pagehide", dismiss, { once: true });
+        document.body.appendChild(host);
+        dialog.showModal();
     }
 
     function waitForPlayerAction(action) {
@@ -203,6 +329,110 @@
         return true;
     }
 
+
+    function startVolumeWheel() {
+        // 委托给 document，不保存旧控件/视频引用，覆盖延迟加载和播放器重建。
+        const controlSelector = ".volume-07c230";
+        const playerSelector = "#js-player-main, .room-Player-Box";
+        const videoSelector = "video#__video2, .layout-Player-videoEntity video";
+        const style = document.createElement("style");
+        style.id = "douyuex-volume-wheel-style";
+        const speaker = 'M5 10h5.5L16 6v20l-5.5-4H5V10z';
+        const normal = 'M21.736 23.517a8 8 0 00-.527-15.206M19.687 19.867a3.925 3.925 0 00-.258-7.46';
+        const muted = 'M20 19l6-6M20 13l6 6';
+        const icon = (path, color = "white") => `url('data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none"><path d="${speaker}" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="${path}" stroke="${color}" stroke-width="2" stroke-linecap="round"/></svg>`).replace(/'/g, "%27")}')`;
+        style.textContent = `
+            :is(${playerSelector}) ${controlSelector}.douyuex-volume-synced .icon-c8be96 svg { display: none !important; }
+            :is(${playerSelector}) ${controlSelector}.douyuex-volume-synced .icon-c8be96::after {
+                content: ''; display: block; width: 32px; height: 32px;
+                background: center / contain no-repeat ${icon(normal)};
+            }
+            :is(${playerSelector}) ${controlSelector}.douyuex-volume-muted .icon-c8be96::after {
+                background-image: ${icon(muted)};
+            }
+            :is(${playerSelector}) ${controlSelector}.douyuex-volume-synced:hover .icon-c8be96::after {
+                background-image: ${icon(normal, "#ff5d23")};
+            }
+            :is(${playerSelector}) ${controlSelector}.douyuex-volume-muted:hover .icon-c8be96::after {
+                background-image: ${icon(muted, "#ff5d23")};
+            }
+        `;
+        document.head.appendChild(style);
+
+        function syncUI(control, video) {
+            const percent = Math.round((video.muted ? 0 : video.volume) * 100);
+            const front = control.querySelector(".volume-bar-93f0b0 .front-99e2aa");
+            const point = control.querySelector(".volume-bar-93f0b0 .point-6ef744");
+            const tips = control.querySelector(".volume-bar-93f0b0 .tips2-9bb064");
+            if (front) front.style.height = `${percent}px`;
+            if (point) point.style.bottom = `${percent + 7}px`;
+            if (tips) tips.textContent = `音量${percent}%`;
+            control.classList.add("douyuex-volume-synced");
+            control.classList.toggle("douyuex-volume-muted", percent === 0);
+        }
+
+        function saveVolume(volume) {
+            // 只更新网站已有的存储项，保留有效期等字段；坏数据不影响另一项。
+            for (const key of ["volume_muted_before_key", "player_storage_volume_h5p_room"]) {
+                try {
+                    const raw = localStorage.getItem(key);
+                    if (!raw) continue;
+                    const data = JSON.parse(raw);
+                    if (!data || typeof data !== "object" || Array.isArray(data) || !("v" in data)) continue;
+                    data.v = volume;
+                    localStorage.setItem(key, JSON.stringify(data));
+                } catch (_) { /* 存储被禁用或数据损坏时，当前音量仍然生效。 */ }
+            }
+        }
+
+        function onWheel(event) {
+            // Ctrl/Meta + 滚轮保留给浏览器缩放；横向滚动不调音量。
+            if (!event.deltaY || event.ctrlKey || event.metaKey) return;
+            const control = event.target.closest?.(controlSelector);
+            const player = control?.closest(playerSelector);
+            const video = player?.querySelector(videoSelector);
+            if (!video || !Number.isFinite(video.volume)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            const volume = Math.max(0, Math.min(100, Math.round(video.volume * 100) + (event.deltaY < 0 ? 5 : -5))) / 100;
+            // 沿用原版：基于播放器记住的音量增减，非零时取消静音。
+            video.volume = volume;
+            video.muted = volume === 0;
+            syncUI(control, video);
+            saveVolume(volume);
+        }
+
+        function onVolumeChange(event) {
+            const video = event.target;
+            if (!video.matches?.(videoSelector) || !Number.isFinite(video.volume)) return;
+            const player = video.closest(playerSelector);
+            const control = player?.querySelector(controlSelector);
+            if (control && player.querySelector(videoSelector) === video) syncUI(control, video);
+        }
+
+        document.addEventListener("wheel", onWheel, { capture: true, passive: false });
+        document.addEventListener("volumechange", onVolumeChange, true);
+        window.addEventListener("pagehide", () => {
+            document.removeEventListener("wheel", onWheel, true);
+            document.removeEventListener("volumechange", onVolumeChange, true);
+            document.querySelectorAll(`${controlSelector}.douyuex-volume-synced`).forEach(control => {
+                control.classList.remove("douyuex-volume-synced", "douyuex-volume-muted");
+            });
+            style.remove();
+        }, { once: true });
+    }
+
+    function startNoCloseJump() {
+        function closeRecommendation() {
+            // 沿用原版的专用下播推荐弹窗，不触碰其他弹窗或普通导航。
+            const button = document.querySelector(".ClosingRecommend .dy-ModalRadius-close-x");
+            if (button && !button.disabled && button.getClientRects().length) button.click();
+        }
+        closeRecommendation();
+        // 观看期间持续检查，以便数小时后下播或再次弹出时仍能处理。
+        const timer = setInterval(closeRecommendation, RETRY_INTERVAL);
+        window.addEventListener("pagehide", () => clearInterval(timer), { once: true });
+    }
 
     function startBarrageResize() {
         const WIDTH_VAR = "--stage-sidebar-width";
@@ -412,13 +642,13 @@
             window.removeEventListener("pagehide", stop);
             document.removeEventListener("fullscreenchange", update);
         }
-        GM_registerMenuCommand("恢复弹幕池默认宽度", reset);
         window.addEventListener("resize", update);
         window.addEventListener("blur", onBlur);
         window.addEventListener("pagehide", stop, { once: true });
         document.addEventListener("fullscreenchange", update);
         const poll = setInterval(check, RETRY_INTERVAL);
         check();
+        return reset;
     }
 
     function startHighestQuality() {

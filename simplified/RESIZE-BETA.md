@@ -1,12 +1,12 @@
 # 弹幕池拖动试用版
 
-> 此试用版已合并到正式版 **1.5.1**，并经个人实际试用确认正常。以下为原试用说明，Beta 文件仅作存档。日常使用请更新 `douyuEx_simplified.user.js` 并停用 Beta；设置不共享，正式版中的弹幕池宽度需重新拖动保存一次。
+> 此试用版已合并到正式版 **1.5.1**，并经个人实际试用确认正常。Beta 脚本已从当前版本移除，历史代码可在 Git 提交记录中查看。以下仅保留原试用说明；日常使用请更新 [正式版脚本](douyuEx_simplified.user.js) 并停用 Beta；设置不共享，正式版中的弹幕池宽度需重新拖动保存一次。
 
-文件：[douyuEx_simplified.resize-beta.user.js](douyuEx_simplified.resize-beta.user.js)，版本 **1.6.0-beta.1**。
+原文件：`douyuEx_simplified.resize-beta.user.js`（已移除），版本 **1.6.0-beta.1**。
 
 基于正式版 1.5.0，保留自动网页全屏、最高画质、简洁模式和刀塔助手屏蔽，新增独立的“拖动调整弹幕池”开关。正式版与原版源码保持不变。
 
-## 安装与使用
+## 原安装与使用流程（历史记录）
 
 1. 在 Tampermonkey 中新建脚本，粘贴试用版文件的完整代码并保存。
 2. 停用正式版、旧的画质 Beta 和原版 DouyuEx，只启用本试用版，再刷新斗鱼直播间。
@@ -25,7 +25,7 @@
 - 松手、键盘微调后保存宽度；取消拖动、丢失指针捕获或窗口失去焦点时恢复拖动前宽度。通过动画帧合并播放器 `resize` 通知。
 - 仅接入已核对的新版布局，不强制修改未知布局。斗鱼改版后可能需要适配。
 
-## 验证情况
+## 当时的验证情况
 
 - `node --check simplified/douyuEx_simplified.resize-beta.user.js`：语法检查通过。
 - `node tests/barrage-resize.test.cjs`：拖动方向、上下限、保存、取消、窗口缩放、隐藏、复位、键盘、节点替换、关闭与清理通过。

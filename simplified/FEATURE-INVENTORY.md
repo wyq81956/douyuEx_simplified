@@ -2,7 +2,7 @@
 
 ## 分析范围与读法
 
-依据本地原版 `src/main.js`、`src/routers/router.js`、`src/packages` 和 `src/require` 的静态代码分析。原始文件没有修改，现有精简脚本也没有增加功能。本清单用于选择下一步保留项，不代表这些旧接口、网页选择器或外部服务目前仍可用；没有登录斗鱼或执行签到、发送、送礼等操作。
+依据本地原版 `src/main.js`、`src/routers/router.js`、`src/packages` 和 `src/require` 的静态代码分析。原始文件没有修改；“已提取”标注已加入精简版的功能。本清单用于选择下一步保留项，不代表这些旧接口、网页选择器或外部服务目前仍可用；没有登录斗鱼或执行签到、发送、送礼等操作。
 
 原版并非真正隔离的插件系统：构建会拼接源码，模块共享变量和函数。因此“可以拆分”表示可以提取其业务逻辑并补齐依赖，不表示直接复制单个文件即可运行。
 
@@ -23,9 +23,9 @@
 | A03 | 防止直播自动暂停 | ExpandTool/ExpandTool_TabSwitch.js → enableIgnoreAutoPause | 接入 / 低 | 原实现仅写入 localStorage 的 freetimed=1；与下面的可见性改写可分开 |
 | A04 | 后台页签保持“可见” | ExpandTool/ExpandTool_TabSwitch.js → enableTabSwitch | 接入 / 中 | 改写 hidden、visibilityState、hasFocus 并拦截事件；画中画也使用其设置。不能保证阻止浏览器系统级冻结 |
 | A05 | 阻止 P2P 上传 | ExpandTool/ExpandTool_P2P.js | 接入 / 中 | 替换页面 RTCPeerConnection 等构造器；依赖 unsafeWindow 和执行时机，会影响页面其他 WebRTC 用途 |
-| A06 | 阻止下播自动跳转 | DisableCloseJump/DisableCloseJump.js | 接入 / 低 | 每秒关闭下播推荐弹窗，不是拦截所有导航 |
+| A06 | 阻止下播自动跳转 | DisableCloseJump/DisableCloseJump.js | 接入 / 低；1.5.2 已提取 | 每秒关闭下播推荐弹窗，不是拦截所有导航；个人实际试用正常 |
 | A07 | 未登录观看相关调整 | NoLogin/NoLogin.js、NoLogin.css | 接入 / 低 | 设置 rateRecordTime_h5p_room 中的 v 字段并配合样式；不是完整账号登录替代方案 |
-| A08 | 鼠标滚轮调音量 | VolumeMouseScrolling/VolumeMouseScrolling.js | 接入 / 低 | 音量区域每次增减 5%，同步 UI 和播放器存储；需适配 video 节点 |
+| A08 | 鼠标滚轮调音量 | VolumeMouseScrolling/VolumeMouseScrolling.js | 接入 / 低；1.5.2 已提取 | 音量区域每次增减 5%，同步 UI 和播放器存储；已适配新版播放器容器 |
 | A09 | 播放倍速 | VideoTools/VideoSpeed/VideoSpeed.js | 接入 / 低 | HTMLVideoElement.playbackRate 与菜单；替换原工具栏入口即可 |
 | A10 | 左右键快退/快进 3 秒 | VideoTools/VideoRecall/VideoRecall.js | 接入 / 低 | 修改 currentTime，跳过输入场景；只在已有可寻址缓存范围内有效 |
 | A11 | 同步到直播缓存尾端 | VideoTools/VideoSync/VideoSync.js | 接入 / 低 | 修改 currentTime 到 buffered.end(0)，不是向服务端获取历史直播 |
