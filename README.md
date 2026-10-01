@@ -37,7 +37,7 @@
 
 1.5.2 新增“滚轮调音量”和“下播不跳转”，两个独立开关默认开启，已获个人实际试用反馈正常。
 
-1.5.1 已合并弹幕池拖动功能，经个人实际试用确认正常。试用过拖动 Beta 的用户请停用 Beta，用正式版文件覆盖原正式版并启用。正式版与 Beta 设置独立，正式版会保留原有设置，弹幕池宽度需重新拖动保存一次。两个 Beta 脚本已从当前版本移除，历史代码仍可在 Git 提交记录中查看；原试用说明保留在 [画质 Beta 说明](simplified/BETA.md) 和 [拖动 Beta 说明](simplified/RESIZE-BETA.md)。
+1.5.1 已合并弹幕池拖动功能，经个人实际试用确认正常。试用过拖动 Beta 的用户请停用 Beta，用正式版文件覆盖原正式版并启用。正式版与 Beta 设置独立，正式版会保留原有设置，弹幕池宽度需重新拖动保存一次。两个 Beta 脚本及其说明文件已从当前版本移除，历史内容仍可在 Git 提交记录中查看。
 
 1. 在浏览器中安装并启用 Tampermonkey。
 2. 打开 [脚本源码](simplified/douyuEx_simplified.user.js)，点击 **Raw** 获取完整内容。也可直接打开 [原始脚本文件](https://raw.githubusercontent.com/wyq81956/douyuEx_simplified/master/simplified/douyuEx_simplified.user.js)；若油猴弹出安装页，按提示安装。
