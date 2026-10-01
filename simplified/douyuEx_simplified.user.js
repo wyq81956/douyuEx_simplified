@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DouyuEx 精简版 - 播放器与简洁模式
 // @namespace    douyuex-simplified
-// @version      1.5.5
+// @version      1.5.6
 // @description  自动网页全屏、最高画质、简洁模式；屏蔽刀塔助手、调整弹幕池、滚轮调音量、下播不跳转、关注页过滤、右键镜像和旋转画面。
 // @author       原始功能：小淳；精简版：本地维护
 // @match        *://www.douyu.com/*
@@ -891,38 +891,89 @@
         const RETRY_GAP = 2000;
         const CONFIRM_TIME = 2000;
         const MAX_CLICKS = 5;
+        const MAX_ROUNDS = 3;
+        const VIDEO = "video#__video2, .layout-Player-videoEntity video";
         let stopped = false;
         let clicks = 0;
+        let rounds = 0;
+        let opens = 0;
         let lastClick = -Infinity;
+        let lastOpen = -Infinity;
         let selectedSince = null;
-        let currentOption = null;
-        let menuSeen = false;
+        let wantedLabel = "";
+        let confirmed = false;
+        let active = false;
+        let until = 0;
         let pending = null;
         let observedRoot = null;
+        let currentVideo = null;
+        let currentControl = null;
+        let ownedPanel = null;
+        let fastPoll = null;
 
         function log(message) {
             console.info(`[DouyuEx 画质 +${((performance.now() - started) / 1000).toFixed(2)}s] ${message}`);
         }
 
-        function findOption() {
-            // 保留稳定版对最高画质的约定：画质菜单第一项。
-            const containers = document.querySelectorAll('[class^="tipItem-"], [class^="tip-"]');
-            for (const container of containers) {
-                if (!container.querySelector('[value^="画质"]')) continue;
-                const option = container.querySelector("ul > li:first-child");
-                if (option) return option;
+        function findMenu(root) {
+            // 从“画质”标签定位本行，避免父面板中的线路选项被当成画质。
+            for (const marker of root.querySelectorAll('[value^="画质"]')) {
+                const row = marker.closest('[class*="tipItem-"]') || marker.parentElement;
+                const control = marker.closest(".rate-ec9440");
+                if (row) return { row, control, option: row.querySelector("ul > li:first-child") };
             }
             return null;
         }
 
-        function stop(reason) {
+        function label(text) { return (text || "").replace(/\s+/g, "").replace(/钻粉$/, ""); }
+        function shownLabel() { return label(currentControl?.querySelector(".textLabel-429176")?.textContent); }
+        function isSelected(option) {
+            return !!option && (Array.from(option.classList).some(name => name.startsWith("selected-"))
+                || option.getAttribute("aria-selected") === "true");
+        }
+
+        function closeOwnedPanel() {
+            const control = ownedPanel;
+            ownedPanel = null;
+            // 用户正在面板内操作时不收起；只关闭脚本自己打开且仍打开的面板。
+            if (!control?.isConnected || control.matches(":hover")) return;
+            const panel = control.querySelector(".tip-cd016b");
+            if (panel?.style.display === "block") control.querySelector(".text-6e175a")?.click();
+        }
+
+        function endRound(reason, success = false) {
+            active = false;
+            confirmed = success;
+            selectedSince = null;
+            if (fastPoll !== null) { clearInterval(fastPoll); fastPoll = null; }
+            closeOwnedPanel();
+            log(reason);
+        }
+
+        function beginRound(reason) {
+            if (stopped || active || rounds >= MAX_ROUNDS || clicks >= MAX_CLICKS) return;
+            rounds++;
+            active = true;
+            confirmed = false;
+            until = performance.now() + 100000;
+            selectedSince = null;
+            fastPoll = setInterval(check, 250);
+            log(reason);
+        }
+
+        function stop(reason, closePanel = true) {
             if (stopped) return;
             stopped = true;
             observer.disconnect();
             clearInterval(poll);
-            clearTimeout(deadline);
+            if (fastPoll !== null) clearInterval(fastPoll);
             clearTimeout(pending);
+            if (closePanel) closeOwnedPanel();
+            else ownedPanel = null;
             document.removeEventListener("click", onUserClick, true);
+            for (const type of ["loadedmetadata", "loadeddata", "playing"]) {
+                document.removeEventListener(type, onVideoReady, true);
+            }
             window.removeEventListener("pagehide", onPageHide);
             log(reason);
         }
@@ -933,68 +984,113 @@
             // 尊重用户手动选择，不把用户刚选择的低画质再次改回去。
             if (!event.isTrusted || !(event.target instanceof Element)) return;
             const item = event.target.closest("li");
-            const first = findOption();
+            const first = findMenu(observedRoot || document)?.option;
             if (item && first && item.parentElement === first.parentElement) {
-                stop("检测到手动选择画质，停止自动切换");
+                stop("检测到手动选择画质，停止自动切换", false);
             }
+        }
+
+        function onVideoReady(event) {
+            if (!event.target.matches?.(VIDEO)) return;
+            if (currentVideo?.isConnected && event.target !== currentVideo) return;
+            // 就绪事件只补充有限轮次；不重置同一播放器的五次点击预算。
+            if (!active && (!confirmed || (wantedLabel && shownLabel() && shownLabel() !== wantedLabel))) {
+                beginRound("播放就绪，补检查画质");
+            }
+            schedule();
+        }
+
+        function prepareMenu(menu, now) {
+            if (!menu?.control || opens >= 10 || now - lastOpen < RETRY_GAP) return;
+            const panel = menu.control.querySelector(".tip-cd016b");
+            const opener = menu.control.querySelector(".text-6e175a");
+            if (!opener || panel?.style.display !== "none") return;
+            // 斗鱼 controlbarNew/Rate 仅在 isShowTipDiv 为真时渲染画质 li。
+            // 点击画质文字触发网站原有打开逻辑，无需移动真实鼠标或访问 React 内部状态。
+            lastOpen = now;
+            opens++;
+            ownedPanel = menu.control;
+            log(`主动打开画质菜单（第 ${opens} 次）`);
+            opener.click();
         }
 
         function check() {
             if (stopped) return;
-            // 页面建立播放器后缩小监听范围；轮询负责发现播放器整体替换。
-            const root = document.querySelector(".room-Player-Box")
+            const now = performance.now();
+            // 持续的每秒轻量核对负责发现播放器整体替换；快速检测只在补切期间运行。
+            const root = document.querySelector("#js-player-main") || document.querySelector(".room-Player-Box")
                 || document.querySelector(".layout-Player-video") || document.body;
             if (root && root !== observedRoot) {
                 observer.disconnect();
                 observer.observe(root, {
-                    childList: true, subtree: true, attributes: true,
+                    childList: true, subtree: true, characterData: true, attributes: true,
                     attributeFilter: ["class", "value", "aria-selected", "aria-disabled", "disabled"]
                 });
                 observedRoot = root;
             }
-            // 菜单出现即可操作，不再额外等待 video 节点。
-            const option = findOption();
-            if (option !== currentOption) {
-                currentOption = option;
+            const menu = root ? findMenu(root) : null;
+            const video = root?.querySelector(VIDEO) || null;
+            const control = menu?.control || null;
+            if (video !== currentVideo || control !== currentControl) {
+                closeOwnedPanel();
+                currentVideo = video;
+                currentControl = control;
+                clicks = opens = rounds = 0;
+                lastClick = lastOpen = -Infinity;
+                wantedLabel = "";
+                confirmed = false;
                 selectedSince = null;
+                if (fastPoll !== null) { clearInterval(fastPoll); fastPoll = null; }
+                active = false;
+                beginRound("播放器或画质控件出现/重建，开始检测");
             }
-            if (!option) return;
-            if (!menuSeen) {
-                menuSeen = true;
-                log("发现画质菜单");
+            if (!active) {
+                const shown = shownLabel();
+                if (confirmed && wantedLabel && shown && shown !== wantedLabel) beginRound("画质发生回退，补检查");
+                if (!active) return;
             }
-            const now = performance.now();
-            const selected = Array.from(option.classList).some(name => name.startsWith("selected-"))
-                || option.getAttribute("aria-selected") === "true";
-            if (selected) {
+            if (now >= until) { endRound("本轮等待超过 100 秒，保留轻量监听"); return; }
+            // 视频未就绪时不消耗点击预算；菜单准备仍可提前进行。
+            const option = menu?.option;
+            if (option) wantedLabel = label(option.textContent);
+            const shown = shownLabel();
+            const ready = !!video && video.readyState >= 2;
+            // 点击后网站会立即隐藏面板并删除 li，因此也要用控制栏文字确认。
+            const matched = wantedLabel && ready && (shown
+                ? shown === wantedLabel && (!option || isSelected(option)) : isSelected(option));
+            if (matched) {
                 if (selectedSince === null) selectedSince = now;
                 if (now - selectedSince >= CONFIRM_TIME) {
-                    stop("最高画质选中状态已保持 2 秒，停止检测（不代表视频已缓冲完成）");
+                    endRound(`最高画质已确认：${wantedLabel}，转为轻量监听（不代表缓冲完成）`, true);
                 }
                 return;
             }
             selectedSince = null;
             if (clicks >= MAX_CLICKS) {
-                if (now - lastClick >= 5000) stop("已达到 5 次点击上限，未确认选中，请手动检查");
+                if (now - lastClick >= 5000) endRound("本播放器已达到 5 次点击上限，未确认选中，请手动检查");
                 return;
             }
-            if (option.matches('[disabled], [aria-disabled="true"]') || now - lastClick < RETRY_GAP) return;
+            if (!option) { prepareMenu(menu, now); return; }
+            if (!ready || option.matches('[disabled], [aria-disabled="true"]') || now - lastClick < RETRY_GAP) return;
             lastClick = now;
             clicks++;
+            // 先保存目标文字，选项点击后可能同步被网站移除。
             log(`点击最高画质：${option.textContent.trim()}（第 ${clicks} 次）`);
             option.click();
         }
 
-        const observer = new MutationObserver(() => {
-            // 合并高频 DOM 变化，避免每条弹幕都触发一次全页查询。
+        function schedule() {
             if (stopped || pending !== null) return;
             pending = setTimeout(() => { pending = null; check(); }, 100);
-        });
-        const poll = setInterval(check, 250);
-        const deadline = setTimeout(() => stop("等待超过 100 秒，停止检测"), 100000);
+        }
+        const observer = new MutationObserver(schedule);
+        const poll = setInterval(check, 1000);
         document.addEventListener("click", onUserClick, true);
+        for (const type of ["loadedmetadata", "loadeddata", "playing"]) {
+            document.addEventListener(type, onVideoReady, true);
+        }
         window.addEventListener("pagehide", onPageHide, { once: true });
-        log("开始检测");
+        beginRound("开始检测");
         check();
     }
 })();
