@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         DouyuEx 精简版 - 播放器与简洁模式
 // @namespace    douyuex-simplified
-// @version      1.5.3
-// @description  自动网页全屏、最高画质、简洁模式；屏蔽刀塔助手、拖动调整弹幕池、滚轮调音量、下播不跳转。
+// @version      1.5.4
+// @description  自动网页全屏、最高画质、简洁模式；屏蔽刀塔助手、拖动调整弹幕池、滚轮调音量、下播不跳转、关注页过滤。
 // @author       原始功能：小淳；精简版：本地维护
 // @match        *://www.douyu.com/*
 // @run-at       document-end
@@ -32,6 +32,7 @@
         barrageWidth: "barrageResize.width",
         volumeWheel: "player.volumeWheel",
         noCloseJump: "player.noCloseJump",
+        followFilter: "followPage.filter",
     };
     const RETRY_INTERVAL = 1000;
     const MAX_ATTEMPTS = 100;
@@ -39,6 +40,7 @@
     let settingsDialog = null;
     let resetBarrageWidth = () => GM_setValue(SETTINGS.barrageWidth, null);
     GM_registerMenuCommand("DouyuEx 设置", openSettings);
+    if (GM_getValue(SETTINGS.followFilter, true) && isFollowPage()) startFollowFilter();
     if (GM_getValue(SETTINGS.resizeBarrage, true)) resetBarrageWidth = startBarrageResize();
     if (GM_getValue(SETTINGS.volumeWheel, true)) startVolumeWheel();
     if (GM_getValue(SETTINGS.noCloseJump, true)) startNoCloseJump();
@@ -138,6 +140,7 @@
             ["拖动调整弹幕池", SETTINGS.resizeBarrage, "拖动分隔线，松手保存宽度"],
             ["滚轮调音量", SETTINGS.volumeWheel, "音量控件上滚动，每次增减 5%"],
             ["下播不跳转", SETTINGS.noCloseJump, "关闭下播推荐弹窗，留在当前房间"],
+            ["关注页过滤", SETTINGS.followFilter, "隐藏顶部横幅及上次直播、预告、轮播卡片"],
         ];
         const inputs = new Map();
         const list = shadow.querySelector(".options");
@@ -188,6 +191,60 @@
         window.addEventListener("pagehide", dismiss, { once: true });
         document.body.appendChild(host);
         dialog.showModal();
+    }
+
+    function isFollowPage() {
+        return /^\/directory\/myFollow\/?$/.test(window.location?.pathname || "");
+    }
+
+    function startFollowFilter() {
+        const cardSelector = "div.layout-Cover-card";
+        const hiddenAttribute = "data-douyuex-follow-hidden";
+        const style = document.createElement("style");
+        style.id = "douyuex-follow-filter-style";
+        style.textContent = `
+            .layout-Banner,
+            ${cardSelector}[${hiddenAttribute}] { display: none !important; }
+        `;
+        document.head.appendChild(style);
+        let pending = null;
+
+        function filterCards() {
+            pending = null;
+            if (!isFollowPage()) { stop(); return; }
+            for (const card of document.querySelectorAll(cardSelector)) {
+                // 对应用户原来的三条 Adblock 扩展规则，按指定的 p/span 匹配。
+                // 不读取整张卡片文字，也不尝试通过接口推测主播状态。
+                const offline = Array.from(card.querySelectorAll("p"))
+                    .some(p => /上次直播|预告/.test(p.textContent));
+                const replay = Array.from(card.querySelectorAll("span"))
+                    .some(span => span.textContent.includes("轮播"));
+                // 网站复用卡片、将状态改为直播时，撤销本脚本的隐藏标记。
+                card.toggleAttribute(hiddenAttribute, offline || replay);
+            }
+        }
+
+        const observer = new MutationObserver(() => {
+            // 合并异步加载、翻页与状态文字更新；不观察自己的隐藏属性。
+            if (pending === null) pending = setTimeout(filterCards, 100);
+        });
+        function stop() {
+            observer.disconnect();
+            if (pending !== null) clearTimeout(pending);
+            document.querySelectorAll(`[${hiddenAttribute}]`)
+                .forEach(card => card.removeAttribute(hiddenAttribute));
+            style.remove();
+            window.removeEventListener("pagehide", stop);
+            window.removeEventListener("popstate", onRouteChange);
+        }
+        function onRouteChange() { if (!isFollowPage()) stop(); }
+        observer.observe(document.body, {
+            childList: true, subtree: true, characterData: true,
+            attributes: true, attributeFilter: ["class"],
+        });
+        window.addEventListener("pagehide", stop, { once: true });
+        window.addEventListener("popstate", onRouteChange);
+        filterCards();
     }
 
     function waitForPlayerAction(action) {
