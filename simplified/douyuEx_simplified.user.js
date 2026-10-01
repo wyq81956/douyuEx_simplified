@@ -505,6 +505,7 @@
         rules.push(`
             .Barrage-listItem :is(
                 .UserCsgoGameDataMedal, .Barrage-honor, .Barrage-icon, .js-user-level.UserLevel,
+                .SupremeRightIconJSX.js-supreme-icon,
                 .FansMedal.is-made, .RoomLevel, .Motor, .ChatAchievement,
                 .Barrage-hiIcon, .Medal, .MatchSystemTeamMedal, .Baby, .FansMedalWrap
             ) { display: none !important; }
