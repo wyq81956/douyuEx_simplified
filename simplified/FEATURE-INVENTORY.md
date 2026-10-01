@@ -32,8 +32,8 @@
 | A12 | 影院模式 | VideoTools/Cinema/Cinema.js | 接入 / 低 | 页面 CSS 和入口按钮；需要 StyleHook 或等价样式注入 |
 | A13 | 亮度、对比度、饱和度 | VideoTools/VideoFilter/VideoFilter.js | 接入 / 低 | 三项可分别开关，建议共用一套 CSS filter 状态 |
 | A14 | 预设画面滤镜 | VideoTools/VideoFilter/VideoFilter.js | 接入 / 中 | CSS filter、伪元素和混合效果，依赖 StyleHook |
-| A15 | 镜像画面 | VideoTools/VideoFilter/VideoFilter.js | 接入 / 低 | rotateY；与旋转、缩放共用 transform，需统一管理 |
-| A16 | 90 度旋转画面 | VideoTools/VideoFilter/VideoFilter.js | 接入 / 低 | rotate 与适配缩放；可与镜像组成一个小模块 |
+| A15 | 镜像画面 | VideoTools/VideoFilter/VideoFilter.js | 1.5.5 已提取 | 播放器右键菜单切换水平镜像；与旋转统一管理，仅变换视频，刷新复位 |
+| A16 | 90 度旋转画面 | VideoTools/VideoFilter/VideoFilter.js | 1.5.5 已提取 | 右键每次顺时针旋转 90°，四次复位；90°/270° 自动适配缩放，可与镜像组合 |
 | A17 | Edge“画质增强”入口 | VideoTools/VideoFilter/VideoFilter.js | 接入 / 低 | 实际修改 imageRendering 并显示浏览器增强提示；不是本地超分算法，也不同于 A02 |
 | A18 | 全景播放 | VideoTools/VideoFilter/VideoFilter.js | 接入 / 高 | require/PanoramaVideo + 外部 THREE；可独立于普通滤镜移除 |
 | A19 | 直播画面局部缩放 | VideoTools/VideoZoom/VideoZoom.js | 接入 / 中 | 选区与视频变换；与镜像、旋转、画中画的布局需协调 |

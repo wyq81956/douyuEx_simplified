@@ -65,7 +65,7 @@ function boot({ wheel = true, noJump = true, missing = false, storageFails = fal
     };
 }
 const t = boot();
-assert.equal(t.menus.size, 1); assert.ok(t.menus.has('DouyuEx 设置')); assert.equal(t.timers.size, 1);
+assert.equal(t.menus.size, 1); assert.ok(t.menus.has('DouyuEx 设置')); assert.equal(t.timers.size, 2);
 assert.equal(t.doc.events.get('wheel')[0].options.passive, false);
 assert.equal(t.doc.events.get('wheel')[0].options.capture, true);
 const envelope = { v: 0.5, expire: 12345, other: 'keep' };
@@ -120,7 +120,8 @@ assert.equal(t.doc.events.get('wheel').length, 0); assert.equal(t.doc.events.get
 assert.ok(!t.layout().control.classList.contains('douyuex-volume-synced'));
 assert.equal(t.wheel(-1).prevented, false);
 const disabled = boot({ wheel: false, noJump: false });
-assert.equal(disabled.styles.length, 0); assert.equal(disabled.timers.size, 0); assert.equal(disabled.doc.events.size, 0);
-assert.equal(boot({ wheel: false }).timers.size, 1);
+assert.equal(disabled.styles.length, 0); assert.equal(disabled.timers.size, 1);
+assert.deepEqual([...disabled.doc.events.keys()], ['contextmenu', 'fullscreenchange']);
+assert.equal(boot({ wheel: false }).timers.size, 2);
 assert.equal(boot({ noJump: false }).doc.events.get('wheel').length, 1);
 console.log('PASS: 滚轮范围/5%步进/上下限/静音/UI/存储/延迟加载/重建/下播推荐/开关/清理');

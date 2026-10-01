@@ -41,6 +41,7 @@ function boot({ saved = null, enabled = true, missing = false, original = '' } =
     const timers = new Map(), frames = new Map(), menus = new Map(), observers = [];
     let serial = 0, size = 1200, visible = true, layout;
     const doc = new Node(), win = new Node(); doc.head = new Node(); doc.documentElement = new Node();
+    doc.querySelector = () => null;
     function replaceLayout() {
         const stage = new Node(), main = new Node(), sidebar = new Node(), aside = new Node();
         stage.appendChild(main); stage.appendChild(sidebar); sidebar.appendChild(aside);

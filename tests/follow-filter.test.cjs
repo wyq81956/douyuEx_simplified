@@ -19,16 +19,29 @@ function boot({ pathname = '/directory/myFollow', enabled, cards = [] } = {}) {
         'simpleMode.enabled': false, 'dotaHelper.blocked': false, 'barrageResize.enabled': false,
         'player.volumeWheel': false, 'player.noCloseJump': false };
     if (enabled !== undefined) prefs['followPage.filter'] = enabled;
-    const styles = [], observers = [], timers = new Map(), events = new Map(), menus = new Map();
+    const styles = [], observers = [], timers = new Map(), intervals = new Map(), events = new Map(), menus = new Map();
     let serial = 0;
     const document = {
+        addEventListener() {},
+        removeEventListener() {},
+        querySelector: () => null,
         body: {}, head: { appendChild: node => styles.push(node) },
         createElement: () => ({ remove() { const i = styles.indexOf(this); if (i >= 0) styles.splice(i, 1); } }),
         querySelectorAll: selector => selector === 'div.layout-Cover-card' ? cards.filter(c => c.isCard)
             : selector === `[${marker}]` ? cards.filter(c => c.attributes.has(marker)) : [],
     };
     const window = { location: { pathname, search: '?sort=live' },
-        addEventListener: (type, fn) => events.set(type, fn), removeEventListener: type => events.delete(type) };
+        addEventListener(type, fn) {
+            const callbacks = events.get(type)?.callbacks || [];
+            callbacks.push(fn);
+            const dispatch = () => [...callbacks].forEach(callback => callback());
+            dispatch.callbacks = callbacks; events.set(type, dispatch);
+        },
+        removeEventListener(type, fn) {
+            const dispatch = events.get(type); if (!dispatch) return;
+            const at = dispatch.callbacks.indexOf(fn); if (at >= 0) dispatch.callbacks.splice(at, 1);
+            if (!dispatch.callbacks.length) events.delete(type);
+        } };
     vm.runInNewContext(source, { document, window,
         GM_getValue: (key, fallback) => key in prefs ? prefs[key] : fallback,
         GM_registerMenuCommand: (name, fn) => menus.set(name, fn),
@@ -39,8 +52,9 @@ function boot({ pathname = '/directory/myFollow', enabled, cards = [] } = {}) {
         },
         setTimeout: (fn, delay) => { assert.equal(delay, 100); timers.set(++serial, fn); return serial; },
         clearTimeout: id => timers.delete(id),
+        setInterval: fn => { intervals.set(++serial, fn); return serial; }, clearInterval: id => intervals.delete(id),
     });
-    return { cards, styles, observers, timers, events, menus, window,
+    return { cards, styles, observers, timers, intervals, events, menus, window,
         mutate: () => observers.filter(o => !o.disconnected).forEach(o => o.fn()),
         flush() { const batch = [...timers.values()]; timers.clear(); batch.forEach(fn => fn()); },
     };
@@ -70,10 +84,11 @@ t.cards.push(lateClass); t.mutate(); t.flush(); assert.ok(!lateClass.attributes.
 lateClass.isCard = true; t.mutate(); t.flush(); assert.ok(lateClass.attributes.has(marker));
 t.mutate(); assert.equal(t.timers.size, 1); t.events.get('pagehide')();
 assert.equal(t.styles.length, 0); assert.equal(t.timers.size, 0); assert.equal(t.events.size, 0);
+assert.equal(t.intervals.size, 0);
 assert.ok(t.observers[0].disconnected); assert.ok(t.cards.every(c => !c.attributes.has(marker)));
 for (const pathname of ['/9999', '/', '/directory/all', '/directory/myFollowers', '/directory/myFollow/other']) {
     const other = boot({ pathname, cards: [card(['上次直播'])] });
-    assert.equal(other.styles.length, 0); assert.equal(other.observers.length, 0); assert.equal(other.events.size, 0);
+    assert.equal(other.styles.length, 0); assert.equal(other.observers.length, 0); assert.equal(other.events.has('popstate'), false);
 }
 assert.equal(boot({ pathname: '/directory/myFollow/' }).styles.length, 1);
 assert.equal(boot({ enabled: false }).observers.length, 0);
@@ -83,5 +98,5 @@ route.window.location.pathname = '/directory/all'; route.events.get('popstate')(
 assert.equal(route.styles.length, 0); assert.ok(!route.cards[0].attributes.has(marker));
 const mutationRoute = boot({ cards: [card(['预告'])] });
 mutationRoute.window.location.pathname = '/9999'; mutationRoute.mutate(); mutationRoute.flush();
-assert.equal(mutationRoute.styles.length, 0); assert.equal(mutationRoute.events.size, 0);
+assert.equal(mutationRoute.styles.length, 0); assert.equal(mutationRoute.events.has('popstate'), false);
 console.log('PASS: 三条规则/标签范围/正常直播保留/动态加载/状态更新/合并扫描/路径限制/关闭/清理');

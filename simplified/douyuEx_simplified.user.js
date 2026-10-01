@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         DouyuEx 精简版 - 播放器与简洁模式
 // @namespace    douyuex-simplified
-// @version      1.5.4
-// @description  自动网页全屏、最高画质、简洁模式；屏蔽刀塔助手、拖动调整弹幕池、滚轮调音量、下播不跳转、关注页过滤。
+// @version      1.5.5
+// @description  自动网页全屏、最高画质、简洁模式；屏蔽刀塔助手、调整弹幕池、滚轮调音量、下播不跳转、关注页过滤、右键镜像和旋转画面。
 // @author       原始功能：小淳；精简版：本地维护
 // @match        *://www.douyu.com/*
 // @run-at       document-end
@@ -19,6 +19,7 @@
 // src/packages/RemoveAD/RemoveAD.js
 // src/packages/VolumeMouseScrolling/VolumeMouseScrolling.{js,css}
 // src/packages/DisableCloseJump/DisableCloseJump.js
+// src/packages/VideoTools/VideoFilter/VideoFilter.js（镜像、旋转）
 // 保留原版按钮选择逻辑；独立设置、有限重试，不依赖原版面板。
 (function () {
     "use strict";
@@ -40,6 +41,7 @@
     let settingsDialog = null;
     let resetBarrageWidth = () => GM_setValue(SETTINGS.barrageWidth, null);
     GM_registerMenuCommand("DouyuEx 设置", openSettings);
+    startVideoTransformMenu();
     if (GM_getValue(SETTINGS.followFilter, true) && isFollowPage()) startFollowFilter();
     if (GM_getValue(SETTINGS.resizeBarrage, true)) resetBarrageWidth = startBarrageResize();
     if (GM_getValue(SETTINGS.volumeWheel, true)) startVolumeWheel();
@@ -191,6 +193,181 @@
         window.addEventListener("pagehide", dismiss, { once: true });
         document.body.appendChild(host);
         dialog.showModal();
+    }
+
+    function startVideoTransformMenu() {
+        const playerSelector = "#js-player-main, .room-Player-Box";
+        const videoSelector = "video#__video2, .layout-Player-videoEntity video";
+        const menuSelector = ".menu-da2a9e:not(.subMenu-de1c61)";
+        const properties = ["rotate", "scale", "transform-origin"];
+        let mirrored = false;
+        let angle = 0;
+        let binding = null;
+        let video = null;
+        let original = null;
+        let frame = null;
+        let timer = null;
+        let attempts = 0;
+
+        function restoreVideo() {
+            if (!video) return;
+            video.removeEventListener("loadedmetadata", update);
+            video.removeEventListener("resize", update);
+            for (const [key, value, priority] of original) {
+                if (value) video.style.setProperty(key, value, priority);
+                else video.style.removeProperty(key);
+            }
+            video = null;
+            original = null;
+        }
+
+        function update() {
+            if (!video) return;
+            if (!mirrored && angle === 0) {
+                for (const [key, value, priority] of original) {
+                    if (value) video.style.setProperty(key, value, priority);
+                    else video.style.removeProperty(key);
+                }
+            } else {
+                // client 尺寸不受变换影响，避免反复根据旋转后的边界计算而越缩越小。
+                const entity = video.closest(".layout-Player-videoEntity");
+                const width = video.clientWidth, height = video.clientHeight;
+                const boxWidth = entity?.clientWidth || width;
+                const boxHeight = entity?.clientHeight || height;
+                const fit = angle % 180 && width > 0 && height > 0
+                    ? Math.min(1, boxWidth / height, boxHeight / width) : 1;
+                // 独立 rotate/scale 属性保留播放器原有的 transform；仅修改 video。
+                video.style.setProperty("rotate", `${angle}deg`, "important");
+                video.style.setProperty("scale", `${mirrored ? -fit : fit} ${fit}`, "important");
+                video.style.setProperty("transform-origin", "center center", "important");
+            }
+            if (binding?.mirror) {
+                const label = mirrored ? "恢复正常画面（取消镜像）" : "镜像画面";
+                if (binding.mirror.textContent !== label) binding.mirror.textContent = label;
+                binding.mirror.setAttribute("aria-checked", String(mirrored));
+                const rotation = `旋转画面（当前 ${angle}°）`;
+                if (binding.rotate.textContent !== rotation) binding.rotate.textContent = rotation;
+            }
+        }
+
+        function schedule() {
+            if (frame === null) frame = requestAnimationFrame(() => { frame = null; sync(); });
+        }
+
+        function removeItems() {
+            binding?.mirror?.remove();
+            binding?.rotate?.remove();
+            if (binding) binding.menu = binding.mirror = binding.rotate = null;
+        }
+
+        function detach() {
+            if (!binding) return;
+            binding.observer.disconnect();
+            binding.resizeObserver.disconnect();
+            removeItems();
+            restoreVideo();
+            binding = null;
+        }
+
+        function makeItem(id, role, action) {
+            const item = document.createElement("li");
+            item.id = id;
+            item.tabIndex = 0;
+            item.setAttribute("role", role);
+            item.addEventListener("click", event => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (!video?.isConnected) { sync(); if (!video) return; }
+                action();
+                update();
+                // 与网站菜单使用同一关闭样式，阻止自定义项触发网站线路选择逻辑。
+                if (binding?.menu) binding.menu.style.visibility = "hidden";
+            });
+            item.addEventListener("keydown", event => {
+                if (!["Enter", " "].includes(event.key)) return;
+                event.preventDefault(); event.stopPropagation(); item.click();
+            });
+            return item;
+        }
+
+        function sync(preferredPlayer) {
+            const player = preferredPlayer || document.querySelector(videoSelector)?.closest(playerSelector);
+            if (!player?.isConnected) { detach(); return; }
+            if (binding?.player !== player) {
+                detach();
+                binding = { player, menu: null, mirror: null, rotate: null,
+                    observer: new MutationObserver(schedule), resizeObserver: new ResizeObserver(update) };
+                binding.observer.observe(player, { childList: true, subtree: true });
+            }
+            const nextVideo = binding.player.querySelector(videoSelector);
+            if (nextVideo !== video) {
+                binding.resizeObserver.disconnect();
+                restoreVideo();
+                video = nextVideo;
+                if (video) {
+                    original = properties.map(key => [key, video.style.getPropertyValue(key), video.style.getPropertyPriority(key)]);
+                    video.addEventListener("loadedmetadata", update);
+                    video.addEventListener("resize", update);
+                    binding.resizeObserver.observe(video);
+                    const entity = video.closest(".layout-Player-videoEntity");
+                    if (entity) binding.resizeObserver.observe(entity);
+                }
+            }
+            // 兼容原生菜单挂在播放器外层的布局；主菜单仍排除编码子菜单。
+            const menu = video ? binding.player.querySelector(menuSelector) || document.querySelector(menuSelector) : null;
+            if (menu !== binding.menu || (menu && (!binding.mirror?.isConnected || !binding.rotate?.isConnected))) {
+                removeItems();
+                if (menu && video) {
+                    binding.menu = menu;
+                    binding.mirror = makeItem("douyuex-video-mirror", "menuitemcheckbox", () => { mirrored = !mirrored; });
+                    binding.rotate = makeItem("douyuex-video-rotate", "menuitem", () => { angle = (angle + 90) % 360; });
+                    // 放在菜单的版本说明后面，沿用原版的菜单位置和视觉样式。
+                    const anchor = menu.children[1] || null;
+                    menu.insertBefore(binding.mirror, anchor);
+                    menu.insertBefore(binding.rotate, anchor);
+                }
+            }
+            update();
+        }
+
+        function onContextMenu(event) {
+            const player = event.target.closest?.(playerSelector);
+            if (!player || !player.querySelector(videoSelector)) return;
+            sync(player);
+            startChecking();
+            // 网站可能在本次 contextmenu 事件冒泡之后才创建菜单。
+            schedule();
+        }
+
+        function startChecking() {
+            if (timer !== null) return;
+            attempts = 0;
+            timer = setInterval(() => {
+                // 自动接入，不能依赖右键事件是否被网站提前拦截。
+                sync();
+                if (binding && video) attempts = 0;
+                else if (++attempts >= MAX_ATTEMPTS) { clearInterval(timer); timer = null; }
+            }, RETRY_INTERVAL);
+        }
+
+        function stop() {
+            if (timer !== null) { clearInterval(timer); timer = null; }
+            if (frame !== null) cancelAnimationFrame(frame);
+            frame = null;
+            detach();
+            document.removeEventListener("contextmenu", onContextMenu, true);
+            document.removeEventListener("fullscreenchange", schedule);
+            window.removeEventListener("resize", update);
+            window.removeEventListener("pagehide", stop);
+        }
+        // 菜单存在时立即加入；每秒核对延迟加载和播放器整体重建。
+        // 没有直播播放器的页面最多等待 100 秒，不创建 DOM 观察器。
+        document.addEventListener("contextmenu", onContextMenu, true);
+        document.addEventListener("fullscreenchange", schedule);
+        window.addEventListener("resize", update);
+        window.addEventListener("pagehide", stop, { once: true });
+        sync();
+        startChecking();
     }
 
     function isFollowPage() {
