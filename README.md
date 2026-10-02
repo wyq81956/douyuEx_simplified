@@ -31,3 +31,7 @@
 更新时用新版完整代码覆盖已有脚本并保存，再刷新页面，原有设置会保留。
 
 [详细说明](simplified/README.md) · [版本发布](https://github.com/wyq81956/douyuEx_simplified/releases)
+
+## 附属脚本：B站动态
+
+另提供独立的 [B站动态：屏蔽悬浮用户资料卡](bilibili/README.md) 油猴脚本，沿用 CSS 屏蔽思路，默认开启，可通过油猴菜单切换。打开 [附属脚本安装链接](https://raw.githubusercontent.com/wyq81956/douyuEx_simplified/master/bilibili/bilibili_dynamic_no_profile.user.js)，或复制 [脚本源码](bilibili/bilibili_dynamic_no_profile.user.js) 到 Tampermonkey 保存，刷新 B站动态页即可试用；当前实页效果尚待验证。
