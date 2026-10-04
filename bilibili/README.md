@@ -1,16 +1,20 @@
-# B站动态：屏蔽悬浮用户资料卡
+# B站附属脚本
 
-本仓库的附属油猴脚本，版本 **1.0.0**，独立安装，无需编译。参考本项目斗鱼精简版的 CSS 屏蔽思路，在 `https://t.bilibili.com/*` 隐藏悬浮用户资料卡，默认开启。
+版本 **1.1.0**，一个油猴脚本包含两项功能：动态页屏蔽悬浮资料卡、视频页自动网页全屏。两个开关默认开启，分别保存，无需编译。
 
-## 安装
+## 安装与更新
 
-1. 安装并启用 Tampermonkey，打开 [脚本安装链接](https://raw.githubusercontent.com/wyq81956/douyuEx_simplified/master/bilibili/bilibili_dynamic_no_profile.user.js)。
-2. 点击安装。如果没有弹出安装页，在 Tampermonkey 中新建脚本，用同目录 [bilibili_dynamic_no_profile.user.js](bilibili_dynamic_no_profile.user.js) 的完整内容覆盖编辑器并保存。
-3. 刷新 [B站动态页](https://t.bilibili.com/)，把鼠标移到动态作者、转发作者等用户的头像上检查效果。
+使用同目录 [bilibiliex.user.js](bilibiliex.user.js) 的完整源码。已安装动态脚本时，在 Tampermonkey 中编辑已有脚本，用完整新代码覆盖并保存，再刷新动态页或视频页。文件名统一为 `bilibiliex.user.js`，沿用原来的脚本名称、namespace 和动态设置键，保留原有资料卡屏蔽设置；新增网页全屏默认开启。
 
-点击 Tampermonkey 图标 → 本脚本 → **关闭资料卡屏蔽并刷新**，即可恢复资料卡；再次选择 **开启资料卡屏蔽并刷新** 可以恢复屏蔽。设置使用独立的油猴存储，刷新和重启浏览器后保留。
+首次使用时，安装并启用 Tampermonkey，打开 [脚本安装链接](https://raw.githubusercontent.com/wyq81956/douyuEx_simplified/master/bilibili/bilibiliex.user.js)。如果没有弹出安装页，在 Tampermonkey 中新建脚本，粘贴完整源码并保存即可。如果试装过单独的“B站视频 - 自动网页全屏”脚本，请停用或删除它。
 
-## 实现与范围
+油猴菜单提供两个独立开关：**关闭/开启资料卡屏蔽并刷新**、**关闭/开启自动网页全屏并刷新**，设置在刷新和重启浏览器后保留。
+
+## 动态：屏蔽悬浮用户资料卡
+
+参考本项目斗鱼精简版的 CSS 屏蔽思路，在 `https://t.bilibili.com/*` 隐藏悬浮用户资料卡。刷新 [B站动态页](https://t.bilibili.com/)，把鼠标移到动态作者、转发作者等用户的头像上检查效果。
+
+### 实现与范围
 
 - 注入 CSS，隐藏 `.bili-user-profile` 和 `bili-user-profile`；不改动头像、昵称和它们的链接，也不拦截鼠标事件。
 - 页面加载初期注入，规则自动作用于后续异步加载、滚动追加及重建的资料卡。
@@ -18,3 +22,17 @@
 - 无外部依赖、网络请求或账号设置修改。页面自身可能仍请求资料卡数据，本脚本只隐藏展示。
 
 选择器参考 [B站共同关注快速查看的作者源码](https://greasyfork.org/zh-CN/scripts/428453-b%E7%AB%99%E5%85%B1%E5%90%8C%E5%85%B3%E6%B3%A8%E5%BF%AB%E9%80%9F%E6%9F%A5%E7%9C%8B/code) 的 `initDynamic()` 和 `initBiliUserProfile()`。已通过 JavaScript 语法和启用/停用逻辑检查，真实页面效果仍待试用；B站改版后可能需要调整选择器。
+
+## 视频：自动网页全屏
+
+在 `https://www.bilibili.com/video/*` 等待视频就绪，自动点击网站的网页全屏按钮，让播放器铺满浏览器网页区域。与资料卡屏蔽共用一个脚本，按页面地址启用对应功能。
+
+### 行为与验证
+
+- 通过 `.bpx-player-container` 的 `data-screen` 检查模式，再点击 `.bpx-player-ctrl-web`；已进入网页全屏或浏览器全屏时直接停止。
+- 视频加载到元数据就绪后才尝试；不要求自动播放，也不修改画质、声音或播放状态。
+- 每 500ms 检查一次，最多等待 100 秒；最多点击 3 次，至少间隔 2 秒。成功后结束，手动退出后不强制恢复。页面离开时清理计时器和监听。
+- 初始化期间手动点击网页全屏、全屏或宽屏按钮，或在非输入区域使用 Esc/W/F/Q，会停止本次自动操作。
+- 每次完整加载页面执行一轮；站内不刷新页面的换集或换视频不重新启动。只匹配普通视频页，番剧和稍后再看页面暂不覆盖。
+
+按钮和模式值参考 [bilibili H5播放器快捷操作的作者源码](https://greasyfork.org/en/scripts/26939-bilibili-h5%E6%92%AD%E6%94%BE%E5%99%A8%E5%BF%AB%E6%8D%B7%E6%93%8D%E4%BD%9C/code)。已检查语法及延迟加载、重复点击、已有全屏、手动操作和超时清理逻辑；真实 B站页面效果尚待试用，网页改版可能需要调整。
