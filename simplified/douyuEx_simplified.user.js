@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         DouyuEx 精简版 - 播放器与简洁模式
+// @name         DouyuEX精简版
 // @namespace    douyuex-simplified
-// @version      1.5.7
+// @version      1.5.7_1
 // @updateURL    https://github.com/wyq81956/douyuEx_simplified/releases/latest/download/douyuEx_simplified.user.js
 // @downloadURL  https://github.com/wyq81956/douyuEx_simplified/releases/latest/download/douyuEx_simplified.user.js
 // @description  自动网页全屏、最高画质、简洁模式；屏蔽刀塔助手、调整弹幕池、滚轮调音量、下播不跳转、关注页过滤、右键镜像和旋转画面。
