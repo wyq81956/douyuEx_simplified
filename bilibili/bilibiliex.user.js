@@ -1,11 +1,13 @@
 // ==UserScript==
 // @name         B站动态 - 屏蔽悬浮用户资料卡
 // @namespace    bilibiliex-simplified
-// @version      1.1.0
+// @version      1.1.1
 // @description  动态页屏蔽悬浮用户资料卡；视频页自动网页全屏，手动退出后不再干预。
 // @author       本地维护
 // @match        https://t.bilibili.com/*
 // @match        https://www.bilibili.com/video/*
+// @match        https://www.bilibili.com/list/watchlater/*
+// @match        https://www.bilibili.com/list/watchlater
 // @run-at       document-start
 // @noframes
 // @grant        GM_addStyle
@@ -21,8 +23,9 @@
     const autoFullscreen = registerToggle("video.autoWebFullscreen", "自动网页全屏");
 
     if (window.location.hostname === "t.bilibili.com" && blockProfile) blockUserProfile();
-    if (window.location.hostname === "www.bilibili.com"
-        && window.location.pathname.startsWith("/video/") && autoFullscreen) startWebFullscreen();
+    if (window.location.hostname === "www.bilibili.com" && autoFullscreen
+        && (window.location.pathname.startsWith("/video/")
+            || /^\/list\/watchlater\/?$/.test(window.location.pathname))) startWebFullscreen();
 
     function registerToggle(key, label) {
         const enabled = GM_getValue(key, true);

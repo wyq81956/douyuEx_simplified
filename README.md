@@ -34,6 +34,6 @@
 
 ## 附属脚本：B站
 
-另提供 [B站附属脚本](bilibili/README.md)，版本 **1.1.0**，一个脚本包含动态页屏蔽悬浮资料卡、视频页自动网页全屏，两项默认开启，油猴菜单分别控制。复制 [完整脚本源码](bilibili/bilibiliex.user.js) 覆盖已有动态脚本并保存，再刷新页面即可试用。视频载入后自动进入网页全屏，手动退出后不再干预；当前实页效果尚待验证。
+另提供 [B站附属脚本](bilibili/README.md)，版本 **1.1.1**，一个脚本包含动态页屏蔽悬浮资料卡、普通视频页及“稍后观看”播放页自动网页全屏，两项默认开启，油猴菜单分别控制。复制 [完整脚本源码](bilibili/bilibiliex.user.js) 覆盖已有动态脚本并保存，再刷新页面即可试用。视频载入后自动进入网页全屏，手动退出后不再干预；当前实页效果尚待验证。
 
 [附属脚本安装链接](https://raw.githubusercontent.com/wyq81956/douyuEx_simplified/master/bilibili/bilibiliex.user.js)
