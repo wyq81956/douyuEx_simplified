@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         B站动态 - 屏蔽悬浮用户资料卡
 // @namespace    bilibiliex-simplified
-// @version      1.2.0
-// @description  动态页屏蔽资料卡；视频页自动网页全屏；直播间自动网页模式、隐藏弹幕等级和粉丝牌、隐藏弹幕池顶部。
+// @version      1.3.0
+// @description  动态页屏蔽资料卡；视频页自动网页全屏；直播间自动网页模式和最高画质、隐藏弹幕等级和粉丝牌、隐藏弹幕池顶部。
 // @author       本地维护
 // @match        https://t.bilibili.com/*
 // @match        https://www.bilibili.com/video/*
@@ -25,6 +25,7 @@
     const liveWebMode = registerToggle("live.autoWebMode", "直播自动网页模式");
     const liveBadges = registerToggle("live.hideChatBadges", "直播弹幕等级和粉丝牌屏蔽");
     const liveChatTop = registerToggle("live.hideChatTop", "直播弹幕池顶部屏蔽");
+    const liveQuality = registerToggle("live.highestQuality", "直播自动最高画质");
 
     if (window.location.hostname === "t.bilibili.com" && blockProfile) blockUserProfile();
     if (window.location.hostname === "www.bilibili.com" && autoFullscreen
@@ -35,6 +36,7 @@
         if (liveBadges) hideLiveChatBadges();
         if (liveChatTop) hideLiveChatTop();
         if (liveWebMode) startLiveWebMode();
+        if (liveQuality) startLiveHighestQuality();
     }
 
     function registerToggle(key, label) {
@@ -94,6 +96,88 @@
                 flex: 0 0 auto !important;
             }
         `);
+    }
+
+    function startLiveHighestQuality() {
+        const deadline = Date.now() + 100000;
+        let stopped = false;
+        let timer = null;
+        let ownedWrap = null;
+        let lastOpen = -Infinity;
+        let opens = 0;
+        let clicks = 0;
+        let lastClick = -Infinity;
+
+        function releasePanel() {
+            if (ownedWrap?.isConnected && !ownedWrap.matches(":hover")) {
+                ownedWrap.dispatchEvent(new MouseEvent("mouseleave"));
+            }
+            ownedWrap = null;
+        }
+
+        function stop() {
+            if (stopped) return;
+            stopped = true;
+            clearInterval(timer);
+            document.removeEventListener("click", onManualClick, true);
+            window.removeEventListener("pagehide", stop);
+            releasePanel();
+        }
+
+        function onManualClick(event) {
+            if (!event.isTrusted) return;
+            const item = event.target?.closest?.(".list-it");
+            const wrap = item?.closest("#live-player .quality-wrap");
+            if (wrap && !item.querySelector(".video-enhance")
+                && !wrap.querySelector(".line-wrap .arrow-icon.left")) stop();
+        }
+
+        function attempt() {
+            if (stopped) return;
+            if (Date.now() >= deadline) { stop(); return; }
+            const player = document.querySelector("#live-player");
+            const video = player?.querySelector("video");
+            const wrap = player?.querySelector(".live-web-player-controller .quality-wrap");
+            if (!video || video.readyState < 1 || !wrap || !wrap.getClientRects().length) return;
+            if (ownedWrap && ownedWrap !== wrap) releasePanel();
+            const panel = wrap.querySelector(":scope > .panel");
+            if (!panel) {
+                // 官方 hover 有 100ms 延迟，发出 mouseenter 后交给下次检查读取。
+                if (opens >= 10 || clicks >= 3) { stop(); return; }
+                if (wrap.matches(":hover") || Date.now() - lastOpen < 2000) return;
+                ownedWrap = wrap;
+                opens++;
+                lastOpen = Date.now();
+                wrap.dispatchEvent(new MouseEvent("mouseenter"));
+                return;
+            }
+            // 线路子菜单也使用 list-it；不能把线路或画质增强误当成清晰度。
+            if (panel.querySelector(".line-wrap .arrow-icon.left")) return;
+            const options = [...panel.querySelectorAll(":scope > .list-it")].filter(item => {
+                const label = item.textContent.trim();
+                return label && !/^自动(?:[（(]|$)/.test(label)
+                    && !item.querySelector(".video-enhance") && !item.disabled
+                    && !item.classList.contains("disabled")
+                    && item.getAttribute("aria-disabled") !== "true";
+            });
+            // 官方质量列表按 qn 降序排列，只选择实际菜单里的第一项。
+            const best = options[0];
+            if (!best) return;
+            if (best.classList.contains("selected")) { stop(); return; }
+            // 官方播放器拒绝未登录用户提升画质；避免反复打开登录提示。
+            const uid = document.cookie.match(/(?:^|;\s*)DedeUserID=(\d+)/)?.[1];
+            if (!uid || Number(uid) === 0 || clicks >= 3) { stop(); return; }
+            if (Date.now() - lastClick < 2000) return;
+            if (!best.isConnected) return;
+            clicks++;
+            lastClick = Date.now();
+            best.click();
+        }
+
+        document.addEventListener("click", onManualClick, true);
+        window.addEventListener("pagehide", stop);
+        timer = setInterval(attempt, 500);
+        attempt();
     }
 
     function startLiveWebMode() {

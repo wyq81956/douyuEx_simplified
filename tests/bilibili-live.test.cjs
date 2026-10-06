@@ -8,7 +8,7 @@ const source = fs.readFileSync(path.join(__dirname, "../bilibili/bilibiliex.user
 function boot(options = {}) {
     let now = 0;
     const timers = new Map(), listeners = new Map(), menus = new Map(), styles = [];
-    const values = { ...options.values };
+    const values = { "live.highestQuality": false, ...options.values };
     const state = {
         present: true, entered: false, full: false, succeeds: true,
         pathname: "/544618", hostname: "live.bilibili.com", ...options,
@@ -92,7 +92,7 @@ function boot(options = {}) {
     let t = boot();
     await t.flush();
     assert.deepEqual(t.clicks, ["网页模式"]);
-    assert.equal(t.menus.size, 5);
+    assert.equal(t.menus.size, 6);
     assert.equal(t.styles.length, 2);
     assert.ok(t.wraps.every(w => !w.showing));
     await t.tick();
