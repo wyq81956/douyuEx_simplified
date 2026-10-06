@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         B站动态 - 屏蔽悬浮用户资料卡
 // @namespace    bilibiliex-simplified
-// @version      1.3.2
+// @version      1.4.0
 // @description  动态页屏蔽资料卡；视频页自动网页全屏；直播间自动网页模式和最高画质、隐藏弹幕等级和粉丝牌及特殊称号、隐藏弹幕池顶部。
 // @author       本地维护
 // @match        https://t.bilibili.com/*
@@ -20,12 +20,22 @@
 (function () {
     "use strict";
 
-    const blockProfile = registerToggle("dynamic.blockUserProfile", "资料卡屏蔽");
-    const autoFullscreen = registerToggle("video.autoWebFullscreen", "自动网页全屏");
-    const liveWebMode = registerToggle("live.autoWebMode", "直播自动网页模式");
-    const liveBadges = registerToggle("live.hideChatBadges", "直播弹幕等级和粉丝牌屏蔽");
-    const liveChatTop = registerToggle("live.hideChatTop", "直播弹幕池顶部屏蔽");
-    const liveQuality = registerToggle("live.highestQuality", "直播自动最高画质");
+    const SETTINGS = {
+        blockProfile: "dynamic.blockUserProfile",
+        autoFullscreen: "video.autoWebFullscreen",
+        liveWebMode: "live.autoWebMode",
+        liveBadges: "live.hideChatBadges",
+        liveChatTop: "live.hideChatTop",
+        liveQuality: "live.highestQuality",
+    };
+    let settingsDialog = null;
+    GM_registerMenuCommand("BilibiliEx 设置", openSettings);
+    const blockProfile = GM_getValue(SETTINGS.blockProfile, true);
+    const autoFullscreen = GM_getValue(SETTINGS.autoFullscreen, true);
+    const liveWebMode = GM_getValue(SETTINGS.liveWebMode, true);
+    const liveBadges = GM_getValue(SETTINGS.liveBadges, true);
+    const liveChatTop = GM_getValue(SETTINGS.liveChatTop, true);
+    const liveQuality = GM_getValue(SETTINGS.liveQuality, true);
 
     if (window.location.hostname === "t.bilibili.com" && blockProfile) blockUserProfile();
     if (window.location.hostname === "www.bilibili.com" && autoFullscreen
@@ -39,13 +49,125 @@
         if (liveQuality) startLiveHighestQuality();
     }
 
-    function registerToggle(key, label) {
-        const enabled = GM_getValue(key, true);
-        GM_registerMenuCommand(`${enabled ? "关闭" : "开启"}${label}并刷新`, () => {
-            GM_setValue(key, !enabled);
+    function openSettings() {
+        if (!document.body) {
+            document.addEventListener("DOMContentLoaded", openSettings, { once: true });
+            return;
+        }
+        if (settingsDialog?.open) { settingsDialog.focus(); return; }
+        // 按需创建，Shadow DOM 隔离网站样式；原生 dialog 负责置顶、焦点和 Esc。
+        const host = document.createElement("div");
+        host.id = "bilibiliex-settings-host";
+        const shadow = host.attachShadow({ mode: "open" });
+        shadow.innerHTML = `
+            <style>
+                :host { all: initial; }
+                * { box-sizing: border-box; }
+                dialog {
+                    padding: 0; border: 1px solid #e5e7eb; border-radius: 16px;
+                    width: min(440px, calc(100vw - 24px)); max-height: calc(100dvh - 32px);
+                    margin: auto; background: #fff; color: #202124;
+                    font: 14px/1.5 system-ui, "Microsoft YaHei", sans-serif;
+                    box-shadow: 0 16px 60px #0004; color-scheme: light;
+                }
+                dialog::backdrop { background: #0007; }
+                .panel { display: flex; flex-direction: column; max-height: calc(100dvh - 34px); }
+                header { padding: 22px 24px 14px; flex-shrink: 0; }
+                h2 { margin: 0 0 4px; font-size: 20px; font-weight: 650; }
+                p { margin: 0; color: #687078; font-size: 12px; }
+                .options { padding: 0 24px; overflow-y: auto; overscroll-behavior: contain; }
+                .option {
+                    display: flex; align-items: center; justify-content: space-between;
+                    gap: 20px; padding: 12px 0; border-bottom: 1px solid #f0f1f2; cursor: pointer;
+                }
+                .name { display: block; font-weight: 550; }
+                .hint { display: block; margin-top: 2px; color: #687078; font-size: 12px; }
+                input {
+                    appearance: none; flex: 0 0 38px; width: 38px; height: 22px;
+                    margin: 0; border: 0; border-radius: 12px; background: #c6cbd0;
+                    position: relative; cursor: pointer;
+                }
+                input::after {
+                    content: ''; position: absolute; width: 16px; height: 16px;
+                    top: 3px; left: 3px; border-radius: 50%; background: #fff;
+                }
+                input:checked { background: #e84b83; }
+                input:checked::after { left: 19px; }
+                :focus-visible { outline: 2px solid #cf356d; outline-offset: 3px; }
+                footer {
+                    display: flex; justify-content: flex-end; gap: 10px;
+                    padding: 12px 24px 20px; flex-shrink: 0;
+                }
+                button { font: inherit; cursor: pointer; border-radius: 8px; padding: 8px 14px; }
+                .cancel { border: 1px solid #d9dde1; color: #40454a; background: #fff; }
+                .save { border: 1px solid #e84b83; color: #fff; background: #e84b83; }
+            </style>
+            <dialog aria-labelledby="settings-title" aria-describedby="settings-description">
+                <div class="panel">
+                    <header>
+                        <h2 id="settings-title">BilibiliEx 设置</h2>
+                        <p id="settings-description">调整后点击“保存并刷新”，使开关生效。</p>
+                    </header>
+                    <div class="options"></div>
+                    <footer>
+                        <button type="button" class="cancel">取消</button>
+                        <button type="button" class="save">保存并刷新</button>
+                    </footer>
+                </div>
+            </dialog>
+        `;
+        const options = [
+            ["动态资料卡屏蔽", SETTINGS.blockProfile, "隐藏动态页头像悬停时的用户资料卡"],
+            ["视频自动网页全屏", SETTINGS.autoFullscreen, "适用于普通视频和稍后观看播放页"],
+            ["直播自动网页模式", SETTINGS.liveWebMode, "就绪后进入网页模式，保留弹幕池"],
+            ["直播自动最高画质", SETTINGS.liveQuality, "选择最高可用画质，手动切换后不强制恢复"],
+            ["直播弹幕装饰屏蔽", SETTINGS.liveBadges, "隐藏等级、粉丝牌和特殊称号"],
+            ["直播弹幕池顶部屏蔽", SETTINGS.liveChatTop, "隐藏排行、活动及顶部覆盖层，扩展聊天区"],
+        ];
+        const inputs = new Map();
+        const list = shadow.querySelector(".options");
+        for (const [label, key, hint] of options) {
+            const row = document.createElement("label");
+            row.className = "option";
+            const text = document.createElement("span");
+            const name = document.createElement("span");
+            name.className = "name";
+            name.textContent = label;
+            const detail = document.createElement("span");
+            detail.className = "hint";
+            detail.textContent = hint;
+            text.append(name, detail);
+            const input = document.createElement("input");
+            input.type = "checkbox";
+            input.setAttribute("role", "switch");
+            input.setAttribute("aria-label", label);
+            input.checked = !!GM_getValue(key, true);
+            row.append(text, input);
+            list.appendChild(row);
+            inputs.set(key, input);
+        }
+        const dialog = shadow.querySelector("dialog");
+        settingsDialog = dialog;
+        function dismiss() { dialog.close(); }
+        dialog.addEventListener("close", () => {
+            settingsDialog = null;
+            window.removeEventListener("pagehide", dismiss);
+            host.remove();
+        }, { once: true });
+        dialog.addEventListener("click", event => {
+            if (event.target !== dialog) return;
+            const rect = dialog.getBoundingClientRect();
+            if (event.clientX < rect.left || event.clientX > rect.right
+                || event.clientY < rect.top || event.clientY > rect.bottom) dismiss();
+        });
+        shadow.querySelector(".cancel").addEventListener("click", dismiss);
+        shadow.querySelector(".save").addEventListener("click", () => {
+            for (const [key, input] of inputs) GM_setValue(key, input.checked);
             window.location.reload();
         });
-        return enabled;
+        window.addEventListener("pagehide", dismiss, { once: true });
+        document.body.appendChild(host);
+        dialog.showModal();
     }
 
     function blockUserProfile() {

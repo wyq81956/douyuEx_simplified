@@ -148,7 +148,7 @@ t.tick(); assert.equal(t.clicks.length, 0); assert.equal(t.state.closes, 1);
 
 t = boot({ values: { "live.highestQuality": false } });
 assert.equal(t.timers.size, 0); assert.equal(t.state.opens, 0);
-t.menus.get("开启直播自动最高画质并刷新")();
-assert.equal(t.values["live.highestQuality"], true);
+assert.deepEqual([...t.menus.keys()], ["BilibiliEx 设置"]);
+assert.equal(t.values["live.highestQuality"], false);
 assert.equal(t.values["live.autoWebMode"], false);
 console.log("Passed: live highest quality, delayed menu, excluded entries, selection confirmation, bounded retries, login state, manual choice and cleanup.");

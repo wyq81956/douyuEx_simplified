@@ -106,7 +106,7 @@ function boot(options = {}) {
     assert.equal(t.clicks.length, 0); // 页面及视频稳定前不点击。
     await t.settle();
     assert.deepEqual(t.clicks, ["网页模式"]);
-    assert.equal(t.menus.size, 6);
+    assert.deepEqual([...t.menus.keys()], ["BilibiliEx 设置"]);
     assert.equal(t.styles.length, 2);
     assert.ok(t.wraps.every(w => !w.showing));
     await t.tick();
@@ -237,8 +237,7 @@ function boot(options = {}) {
     t = boot({ values: { "live.autoWebMode": false, "live.hideChatBadges": false, "live.hideChatTop": false } });
     assert.equal(t.styles.length, 0);
     assert.equal(t.timers.size, 0);
-    t.menus.get("开启直播自动网页模式并刷新")();
-    assert.equal(t.values["live.autoWebMode"], true);
+    assert.equal(t.values["live.autoWebMode"], false);
     assert.equal(t.values["live.hideChatBadges"], false);
 
     for (const pathname of ["/", "/p/html/activity.html", "/544618/other"]) {
