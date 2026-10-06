@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         B站动态 - 屏蔽悬浮用户资料卡
 // @namespace    bilibiliex-simplified
-// @version      1.3.0
-// @description  动态页屏蔽资料卡；视频页自动网页全屏；直播间自动网页模式和最高画质、隐藏弹幕等级和粉丝牌、隐藏弹幕池顶部。
+// @version      1.3.1
+// @description  动态页屏蔽资料卡；视频页自动网页全屏；直播间自动网页模式和最高画质、隐藏弹幕等级和粉丝牌及特殊称号、隐藏弹幕池顶部。
 // @author       本地维护
 // @match        https://t.bilibili.com/*
 // @match        https://www.bilibili.com/video/*
@@ -65,7 +65,8 @@
         GM_addStyle(`
             #chat-history-list .chat-item :is(
                 .wealth-medal-ctnr, .user-level, .user-level-icon, .level-icon,
-                .fans-medal-item-ctnr, .fans-medal-item, .group-medal-ctnr
+                .fans-medal-item-ctnr, .fans-medal-item, .group-medal-ctnr,
+                .title-label
             ) { display: none !important; }
         `);
     }
