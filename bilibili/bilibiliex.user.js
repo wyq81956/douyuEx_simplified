@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         B站动态 - 屏蔽悬浮用户资料卡
 // @namespace    bilibiliex-simplified
-// @version      1.3.1
+// @version      1.3.2
 // @description  动态页屏蔽资料卡；视频页自动网页全屏；直播间自动网页模式和最高画质、隐藏弹幕等级和粉丝牌及特殊称号、隐藏弹幕池顶部。
 // @author       本地维护
 // @match        https://t.bilibili.com/*
@@ -189,6 +189,10 @@
         let stopped = false;
         let busy = false;
         let timer = null;
+        let readyPlayer = null;
+        let readyVideo = null;
+        let readySince = null;
+        let enteredSince = null;
 
         function stop() {
             if (stopped) return;
@@ -213,8 +217,12 @@
         }
 
         function alreadyEntered() {
-            return document.body?.classList.contains("player-full-win")
-                || !!document.fullscreenElement;
+            if (!document.body?.classList.contains("player-full-win")) return false;
+            const container = document.querySelector("#fullscreen-container");
+            if (!container || getComputedStyle(container).position !== "fixed") return false;
+            const rect = container.getBoundingClientRect();
+            return rect.width > 0 && Math.abs(rect.top) <= 3
+                && Math.abs(rect.bottom - window.innerHeight) <= 3;
         }
 
         async function findButton(player) {
@@ -232,8 +240,7 @@
                     }
                     const label = wrap.querySelector(".tip")?.textContent.trim() || "";
                     if (!modeLabel.test(label)) continue;
-                    if (label.startsWith("退出")) { stop(); return null; }
-                    return wrap.querySelector(".icon");
+                    return { button: wrap.querySelector(".icon"), exiting: label.startsWith("退出") };
                 } finally {
                     if (!wasHovered && !wrap.matches(":hover")) {
                         wrap.dispatchEvent(new MouseEvent("mouseleave"));
@@ -245,20 +252,44 @@
 
         async function attempt() {
             if (stopped || busy) return;
-            if (Date.now() >= deadline || clicks >= 3) { stop(); return; }
-            if (alreadyEntered()) { stop(); return; }
+            if (Date.now() >= deadline || document.fullscreenElement) { stop(); return; }
+            // 按钮状态先更新，页面监听和 CSS 后更新，不能仅凭“退出”文案判成功。
+            if (alreadyEntered()) {
+                enteredSince ??= Date.now();
+                if (Date.now() - enteredSince >= 1000) stop();
+                return;
+            }
+            enteredSince = null;
             if (Date.now() - lastClick < 2000) return;
+            if (clicks >= 5) { stop(); return; }
             const player = document.querySelector("#live-player");
-            if (!player || !player.getClientRects().length) return;
+            const video = player?.querySelector("video");
+            if (document.readyState !== "complete" || !video || video.readyState < 1
+                || !player.getClientRects().length) {
+                readySince = null;
+                return;
+            }
+            // 等待页面及视频就绪后稳定 2 秒，节点重建或视频重新加载重新计时。
+            if (readyPlayer !== player || readyVideo !== video || readySince === null) {
+                readyPlayer = player;
+                readyVideo = video;
+                readySince = Date.now();
+            }
+            if (Date.now() - readySince < 2000) return;
             busy = true;
             try {
-                const button = await findButton(player);
+                const control = await findButton(player);
+                const button = control?.button;
                 if (stopped || !button || !button.isConnected || button.disabled
-                    || button.getAttribute("aria-disabled") === "true") return;
-                if (alreadyEntered()) { stop(); return; }
+                    || button.getAttribute("aria-disabled") === "true"
+                    || document.readyState !== "complete"
+                    || player.querySelector("video") !== readyVideo || readyVideo.readyState < 1) return;
+                if (alreadyEntered() || document.fullscreenElement) return;
                 clicks++;
                 lastClick = Date.now();
                 button.click();
+                // 空切换：先退出播放器内部模式，等一轮稳定期后重新进入。
+                if (control.exiting) readySince = Date.now();
             } finally {
                 busy = false;
             }

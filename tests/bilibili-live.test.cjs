@@ -11,6 +11,7 @@ function boot(options = {}) {
     const values = { "live.highestQuality": false, ...options.values };
     const state = {
         present: true, entered: false, full: false, succeeds: true,
+        loaded: true, ready: 1, internalWeb: false, layout: true,
         pathname: "/544618", hostname: "live.bilibili.com", ...options,
     };
     const clicks = [];
@@ -26,7 +27,10 @@ function boot(options = {}) {
             isConnected: true, disabled: false, getAttribute: () => null,
             click() {
                 clicks.push(label);
-                if (label === "网页模式" && state.succeeds) state.entered = true;
+                if (label === "网页模式") {
+                    state.internalWeb = !state.internalWeb;
+                    if (state.succeeds) state.entered = state.internalWeb;
+                }
             },
         };
         const node = {
@@ -37,7 +41,7 @@ function boot(options = {}) {
                 // Svelte 在下一微任务渲染提示，不在事件中同步生成。
                 if (event.type === "mouseenter") {
                     node.showing = true;
-                    queueMicrotask(() => { tip = { textContent: label }; });
+                    queueMicrotask(() => { tip = { textContent: label === "网页模式" && state.internalWeb ? "退出网页模式" : label }; });
                 } else {
                     node.showing = false;
                     tip = null;
@@ -48,10 +52,14 @@ function boot(options = {}) {
     }
     // 故意打乱顺序并插入无关控件，防止退回到 nth-child 定位。
     const wraps = [wrap("镜像模式"), wrap("全屏"), wrap("网页模式"), wrap("关闭弹幕")];
+    const video = { get readyState() { return state.ready; } };
+    const container = {
+        getBoundingClientRect: () => ({ top: state.layout ? 0 : 120, bottom: state.layout ? 900 : 600, width: 1200 }),
+    };
     const player = {
         getClientRects: () => [1], querySelectorAll: () => wraps,
         getAttribute: () => state.entered ? "web" : "normal",
-        querySelector: selector => selector === "video" ? { readyState: 1 } : {
+        querySelector: selector => selector === "video" ? video : {
             getAttribute: () => null,
             click() { clicks.push("视频网页全屏"); state.entered = true; },
         },
@@ -60,11 +68,14 @@ function boot(options = {}) {
         ...events("doc:"),
         body: { classList: { contains: name => name === "player-full-win" && state.entered } },
         get fullscreenElement() { return state.full ? {} : null; },
-        querySelector: () => state.present ? player : null,
+        get readyState() { return state.loaded ? "complete" : "loading"; },
+        querySelector: selector => selector === "#fullscreen-container" ? container : state.present ? player : null,
     };
     vm.runInNewContext(source, {
         document,
+        getComputedStyle: () => ({ position: state.layout ? "fixed" : "static" }),
         window: {
+            innerHeight: 900,
             ...events("win:"),
             location: { hostname: state.hostname, pathname: state.pathname, reload() {} },
         },
@@ -79,6 +90,7 @@ function boot(options = {}) {
     const flush = () => new Promise(resolve => setImmediate(resolve));
     return {
         state, wraps, timers, listeners, menus, styles, values, clicks, wrap, flush,
+        async settle() { await this.tick(); await this.tick(2000); await this.tick(); await this.tick(1000); },
         async tick(ms = 500) {
             now += ms;
             for (const fn of [...timers.values()]) await fn();
@@ -91,6 +103,8 @@ function boot(options = {}) {
 (async () => {
     let t = boot();
     await t.flush();
+    assert.equal(t.clicks.length, 0); // 页面及视频稳定前不点击。
+    await t.settle();
     assert.deepEqual(t.clicks, ["网页模式"]);
     assert.equal(t.menus.size, 6);
     assert.equal(t.styles.length, 2);
@@ -106,27 +120,80 @@ function boot(options = {}) {
     await t.flush();
     assert.equal(t.clicks.length, 0);
     t.state.present = true;
-    await t.tick();
+    await t.settle();
     assert.deepEqual(t.clicks, ["网页模式"]);
 
     for (const flag of ["entered", "full"]) {
         t = boot({ [flag]: true });
-        await t.flush();
+        await t.settle();
         assert.equal(t.clicks.length, 0);
         assert.equal(t.timers.size, 0);
     }
 
-    t = boot({ present: false });
-    t.wraps.splice(0, t.wraps.length, t.wrap("退出网页模式"));
-    t.state.present = true;
-    await t.tick();
-    assert.equal(t.clicks.length, 0);
+    // 复现早点击：提示已经是“退出”，页面却未进入，先重置再进入。
+    t = boot({ internalWeb: true, succeeds: false });
+    await t.tick(2000);
+    assert.equal(t.clicks.length, 1);
+    assert.equal(t.state.internalWeb, false);
+    assert.equal(t.timers.size, 1);
+    t.state.succeeds = true;
+    await t.settle();
+    assert.equal(t.state.entered, true);
+    assert.equal(t.clicks.length, 2);
     assert.equal(t.timers.size, 0);
 
     t = boot({ succeeds: false });
-    await t.flush();
-    for (let i = 0; i < 12; i++) await t.tick();
+    await t.tick(2000); // 首次进入只更新了播放器内部状态。
+    assert.equal(t.state.internalWeb, true);
+    assert.equal(t.state.entered, false);
+    await t.tick(1500); assert.equal(t.clicks.length, 1);
+    await t.tick(500); // 退出空模式。
+    assert.equal(t.state.internalWeb, false);
+    t.state.succeeds = true;
+    await t.tick(2000); // 重新进入。
+    await t.tick(); await t.tick(1000);
     assert.equal(t.clicks.length, 3);
+    assert.equal(t.timers.size, 0);
+
+    t = boot({ succeeds: false });
+    await t.tick(2000);
+    await t.tick(500);
+    t.state.entered = true; // 页面监听延迟生效，保留一次异步响应的时间。
+    await t.tick(); await t.tick(1000);
+    assert.equal(t.clicks.length, 1);
+    assert.equal(t.timers.size, 0);
+
+    t = boot({ entered: true });
+    await t.tick(500);
+    t.state.entered = false; await t.tick(500);
+    assert.equal(t.timers.size, 1); // 布局短暂出现后消失，不提前结束。
+
+    t = boot({ succeeds: false });
+    await t.tick(2000);
+    t.emit("doc:click", { isTrusted: true, target: { closest: () => true } });
+    await t.tick(10000);
+    assert.equal(t.clicks.length, 1); // 修复空模式期间手动操作也会取消。
+    assert.equal(t.listeners.size, 0);
+
+    t = boot({ loaded: false, ready: 0 });
+    await t.tick(10000); assert.equal(t.clicks.length, 0);
+    t.state.loaded = true;
+    await t.tick(3000); assert.equal(t.clicks.length, 0);
+    t.state.ready = 1;
+    await t.tick(); await t.tick(1500); assert.equal(t.clicks.length, 0);
+    t.state.ready = 0; await t.tick(); // 就绪中断会重新计时。
+    t.state.ready = 1;
+    await t.settle(); assert.equal(t.clicks.length, 1);
+
+    t = boot({ entered: true, layout: false, succeeds: false });
+    await t.tick(2000);
+    assert.equal(t.clicks.length, 1); // 仅有 body 类名也不能提前认定布局成功。
+    assert.equal(t.timers.size, 1);
+
+    t = boot({ succeeds: false });
+    await t.flush();
+    for (let i = 0; i < 36; i++) await t.tick();
+    assert.equal(t.clicks.length, 5);
     assert.equal(t.timers.size, 0);
 
     t = boot({ present: false });
@@ -147,7 +214,9 @@ function boot(options = {}) {
     assert.equal(t.timers.size, 0);
 
     t = boot();
+    const pending = t.tick(2000);
     t.emit("win:pagehide"); // 提示识别尚在 await 中时离页，不点击残留按钮。
+    await pending;
     await t.flush();
     assert.equal(t.clicks.length, 0);
     assert.equal(t.timers.size, 0);
@@ -156,12 +225,12 @@ function boot(options = {}) {
     t = boot({ present: false });
     t.wraps[2].icon.isConnected = false;
     t.state.present = true;
-    await t.tick();
+    await t.settle();
     assert.equal(t.clicks.length, 0);
 
     for (const key of ["live.autoWebMode", "live.hideChatBadges", "live.hideChatTop"]) {
         t = boot({ values: { [key]: false } });
-        await t.flush();
+        await t.settle();
         assert.equal(t.clicks.length, key === "live.autoWebMode" ? 0 : 1);
         assert.equal(t.styles.length, key === "live.autoWebMode" ? 2 : 1);
     }
@@ -189,5 +258,5 @@ function boot(options = {}) {
         await t.tick();
         assert.equal(t.timers.size, 0);
     }
-    console.log("Passed: Bilibili live routing, tooltip identification, settings, delayed controls, fullscreen states, retries, manual actions, stale nodes and cleanup.");
+    console.log("Passed: Bilibili live routing, readiness delay, actual layout confirmation, empty-mode recovery, bounded retries, settings, manual actions, stale nodes and cleanup.");
 })().catch(error => { console.error(error); process.exitCode = 1; });
