@@ -39,3 +39,7 @@
 [附属脚本安装链接](https://github.com/wyq81956/douyuEx_simplified/releases/latest/download/bilibiliex.user.js)
 
 B站旧版用户先通过正式版安装链接更新一次，再开启篡改猴自动更新检查。两个脚本分别订阅最新正式 Release 中同名的附件，按各自版本号更新，保留原有设置。后续每次正式 Release 都需同时提供 `douyuEx_simplified.user.js` 和 `bilibiliex.user.js` 两份附件。
+
+## 附属脚本：X
+
+另提供 [X 附属脚本](x/README.md)，版本 **1.0.0**，默认隐藏头像、昵称、用户名及名字附近区域触发的悬浮用户资料卡，保留原有链接和点击操作。将 [完整脚本源码](x/xex.user.js) 粘贴到油猴新建脚本中并保存，再刷新 X 页面即可使用；油猴菜单可切换屏蔽开关。支持 X 和旧 Twitter 地址，当前供本地安装，用户已确认实际 X 页面试用正常。
