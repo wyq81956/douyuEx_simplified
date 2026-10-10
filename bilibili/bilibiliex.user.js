@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         B站动态 - 屏蔽悬浮用户资料卡
 // @namespace    bilibiliex-simplified
-// @version      1.4.1
+// @version      1.5.0
 // @updateURL    https://github.com/wyq81956/douyuEx_simplified/releases/latest/download/bilibiliex.user.js
 // @downloadURL  https://github.com/wyq81956/douyuEx_simplified/releases/latest/download/bilibiliex.user.js
-// @description  动态页屏蔽资料卡；视频页自动网页全屏；直播间自动网页模式和最高画质、隐藏弹幕等级和粉丝牌及特殊称号、隐藏弹幕池顶部。
+// @description  动态页屏蔽资料卡；视频页自动网页全屏；T键切换视频和直播网页全屏；直播间自动网页模式和最高画质、隐藏弹幕等级和粉丝牌及特殊称号、隐藏弹幕池顶部。
 // @author       本地维护
 // @match        https://t.bilibili.com/*
 // @match        https://www.bilibili.com/video/*
@@ -29,8 +29,10 @@
         liveBadges: "live.hideChatBadges",
         liveChatTop: "live.hideChatTop",
         liveQuality: "live.highestQuality",
+        webFullscreenHotkey: "keyboard.webFullscreen",
     };
     let settingsDialog = null;
+    let cancelAutoWebMode = () => {};
     GM_registerMenuCommand("BilibiliEx 设置", openSettings);
     const blockProfile = GM_getValue(SETTINGS.blockProfile, true);
     const autoFullscreen = GM_getValue(SETTINGS.autoFullscreen, true);
@@ -38,18 +40,22 @@
     const liveBadges = GM_getValue(SETTINGS.liveBadges, true);
     const liveChatTop = GM_getValue(SETTINGS.liveChatTop, true);
     const liveQuality = GM_getValue(SETTINGS.liveQuality, true);
+    const webFullscreenHotkey = GM_getValue(SETTINGS.webFullscreenHotkey, true);
+    const isVideoPage = window.location.hostname === "www.bilibili.com"
+        && (window.location.pathname.startsWith("/video/")
+            || /^\/list\/watchlater\/?$/.test(window.location.pathname));
+    const isLivePage = window.location.hostname === "live.bilibili.com"
+        && /^\/(?:blanc\/)?\d+\/?$/.test(window.location.pathname);
 
     if (window.location.hostname === "t.bilibili.com" && blockProfile) blockUserProfile();
-    if (window.location.hostname === "www.bilibili.com" && autoFullscreen
-        && (window.location.pathname.startsWith("/video/")
-            || /^\/list\/watchlater\/?$/.test(window.location.pathname))) startWebFullscreen();
-    if (window.location.hostname === "live.bilibili.com"
-        && /^\/(?:blanc\/)?\d+\/?$/.test(window.location.pathname)) {
+    if (isVideoPage && autoFullscreen) startWebFullscreen();
+    if (isLivePage) {
         if (liveBadges) hideLiveChatBadges();
         if (liveChatTop) hideLiveChatTop();
         if (liveWebMode) startLiveWebMode();
         if (liveQuality) startLiveHighestQuality();
     }
+    if (webFullscreenHotkey && (isVideoPage || isLivePage)) startWebFullscreenHotkey();
 
     function openSettings() {
         if (!document.body) {
@@ -125,6 +131,7 @@
             ["直播自动最高画质", SETTINGS.liveQuality, "选择最高可用画质，手动切换后不强制恢复"],
             ["直播弹幕装饰屏蔽", SETTINGS.liveBadges, "隐藏等级、粉丝牌和特殊称号"],
             ["直播弹幕池顶部屏蔽", SETTINGS.liveChatTop, "隐藏排行、活动及顶部覆盖层，扩展聊天区"],
+            ["T 键切换网页全屏", SETTINGS.webFullscreenHotkey, "视频、稍后观看和直播；输入时不触发"],
         ];
         const inputs = new Map();
         const list = shadow.querySelector(".options");
@@ -170,6 +177,62 @@
         window.addEventListener("pagehide", dismiss, { once: true });
         document.body.appendChild(host);
         dialog.showModal();
+    }
+
+    function startWebFullscreenHotkey() {
+        let stopped = false;
+        let busy = false;
+        let lastToggle = -Infinity;
+
+        function stop() {
+            stopped = true;
+            document.removeEventListener("keydown", onKey, true);
+            window.removeEventListener("pagehide", stop);
+        }
+
+        async function onKey(event) {
+            if (!event.isTrusted || event.defaultPrevented || event.isComposing || event.keyCode === 229
+                || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey
+                || event.key?.toLowerCase() !== "t" || settingsDialog?.open) return;
+            // composedPath 识别 Shadow DOM 内的输入框，避免事件被重定向到宿主后误触发。
+            const path = event.composedPath?.() || [event.target];
+            if (path.some(node => node?.isContentEditable || node?.closest?.(
+                "input, textarea, select, [role='textbox'], dialog, [role='dialog']"
+            ))) return;
+            if (stopped || document.fullscreenElement) return;
+            const player = document.querySelector(isLivePage ? "#live-player" : ".bpx-player-container");
+            const video = player?.querySelector("video");
+            if (!video || video.readyState < 1 || !player.getClientRects().length) return;
+            let button = null;
+            if (!isLivePage) {
+                if (!["normal", "wide", "web"].includes(player.getAttribute("data-screen"))) return;
+                button = player.querySelector(".bpx-player-ctrl-web");
+                if (!canClick(button)) return;
+            }
+            // 在 await 前拦截按键，防止网站的同名快捷键再切换一次。
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            if (event.repeat || busy || Date.now() - lastToggle < 350) return;
+            cancelAutoWebMode();
+            busy = true;
+            try {
+                if (isLivePage) button = (await findLiveWebModeButton(player, () => stopped))?.button;
+                if (stopped || !canClick(button) || document.fullscreenElement
+                    || player.querySelector("video") !== video || video.readyState < 1) return;
+                lastToggle = Date.now();
+                button.click();
+            } finally {
+                busy = false;
+            }
+        }
+
+        function canClick(button) {
+            return button?.isConnected && !button.disabled
+                && button.getAttribute("aria-disabled") !== "true";
+        }
+
+        document.addEventListener("keydown", onKey, true);
+        window.addEventListener("pagehide", stop);
     }
 
     function blockUserProfile() {
@@ -305,9 +368,34 @@
         attempt();
     }
 
+    async function findLiveWebModeButton(player, isCancelled) {
+        const modeLabel = /^(退出)?网页(?:模式|全屏)(?:\s*\([^)]*\))?$/;
+        // 官方播放器右侧的提示文字仅在 mouseenter 后通过 Svelte 渲染。
+        // 按文案识别而非 nth-child，避免某个控件缺失时误点其他按钮。
+        for (const wrap of player.querySelectorAll(
+            ".live-web-player-controller .right-area > .tip-wrap"
+        )) {
+            if (isCancelled()) return null;
+            const wasHovered = wrap.matches(":hover");
+            try {
+                if (!wrap.querySelector(".tip")) {
+                    wrap.dispatchEvent(new MouseEvent("mouseenter"));
+                    await Promise.resolve();
+                }
+                const label = wrap.querySelector(".tip")?.textContent.trim() || "";
+                if (!modeLabel.test(label)) continue;
+                return { button: wrap.querySelector(".icon"), exiting: label.startsWith("退出") };
+            } finally {
+                if (!wasHovered && !wrap.matches(":hover")) {
+                    wrap.dispatchEvent(new MouseEvent("mouseleave"));
+                }
+            }
+        }
+        return null;
+    }
+
     function startLiveWebMode() {
         const deadline = Date.now() + 100000;
-        const modeLabel = /^(退出)?网页(?:模式|全屏)(?:\s*\([^)]*\))?$/;
         let clicks = 0;
         let lastClick = -Infinity;
         let stopped = false;
@@ -326,6 +414,7 @@
             document.removeEventListener("keydown", onManualKey, true);
             window.removeEventListener("pagehide", stop);
         }
+        cancelAutoWebMode = stop;
 
         function onManualClick(event) {
             if (event.isTrusted && event.target?.closest?.(
@@ -347,31 +436,6 @@
             const rect = container.getBoundingClientRect();
             return rect.width > 0 && Math.abs(rect.top) <= 3
                 && Math.abs(rect.bottom - window.innerHeight) <= 3;
-        }
-
-        async function findButton(player) {
-            // 官方播放器右侧的提示文字仅在 mouseenter 后通过 Svelte 渲染。
-            // 按文案识别而非 nth-child，避免某个控件缺失时误点其他按钮。
-            for (const wrap of player.querySelectorAll(
-                ".live-web-player-controller .right-area > .tip-wrap"
-            )) {
-                if (stopped) return null;
-                const wasHovered = wrap.matches(":hover");
-                try {
-                    if (!wrap.querySelector(".tip")) {
-                        wrap.dispatchEvent(new MouseEvent("mouseenter"));
-                        await Promise.resolve();
-                    }
-                    const label = wrap.querySelector(".tip")?.textContent.trim() || "";
-                    if (!modeLabel.test(label)) continue;
-                    return { button: wrap.querySelector(".icon"), exiting: label.startsWith("退出") };
-                } finally {
-                    if (!wasHovered && !wrap.matches(":hover")) {
-                        wrap.dispatchEvent(new MouseEvent("mouseleave"));
-                    }
-                }
-            }
-            return null;
         }
 
         async function attempt() {
@@ -402,7 +466,7 @@
             if (Date.now() - readySince < 2000) return;
             busy = true;
             try {
-                const control = await findButton(player);
+                const control = await findLiveWebModeButton(player, () => stopped);
                 const button = control?.button;
                 if (stopped || !button || !button.isConnected || button.disabled
                     || button.getAttribute("aria-disabled") === "true"
@@ -441,6 +505,7 @@
             document.removeEventListener("keydown", onManualKey, true);
             window.removeEventListener("pagehide", stop);
         }
+        cancelAutoWebMode = stop;
 
         function onManualClick(event) {
             if (event.isTrusted && event.target?.closest?.(

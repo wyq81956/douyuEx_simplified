@@ -15,6 +15,7 @@ function boot(options = {}) {
     };
     const values = {
         "live.autoWebMode": false, "live.hideChatBadges": false, "live.hideChatTop": false,
+        "keyboard.webFullscreen": false,
         ...options.values,
     };
     function item(label, extra = {}) {

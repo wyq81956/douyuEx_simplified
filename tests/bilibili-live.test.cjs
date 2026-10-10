@@ -8,7 +8,7 @@ const source = fs.readFileSync(path.join(__dirname, "../bilibili/bilibiliex.user
 function boot(options = {}) {
     let now = 0;
     const timers = new Map(), listeners = new Map(), menus = new Map(), styles = [];
-    const values = { "live.highestQuality": false, ...options.values };
+    const values = { "live.highestQuality": false, "keyboard.webFullscreen": false, ...options.values };
     const state = {
         present: true, entered: false, full: false, succeeds: true,
         loaded: true, ready: 1, internalWeb: false, layout: true,
