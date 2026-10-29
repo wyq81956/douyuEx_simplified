@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         B站动态 - 屏蔽悬浮用户资料卡
 // @namespace    bilibiliex-simplified
-// @version      1.5.0
+// @version      1.6.0
 // @updateURL    https://github.com/wyq81956/douyuEx_simplified/releases/latest/download/bilibiliex.user.js
 // @downloadURL  https://github.com/wyq81956/douyuEx_simplified/releases/latest/download/bilibiliex.user.js
-// @description  动态页屏蔽资料卡；视频页自动网页全屏；T键切换视频和直播网页全屏；直播间自动网页模式和最高画质、隐藏弹幕等级和粉丝牌及特殊称号、隐藏弹幕池顶部。
+// @description  动态页屏蔽资料卡；视频网页全屏右侧同步弹幕池；T键切换网页全屏；直播间自动网页模式和最高画质、隐藏弹幕等级和粉丝牌及特殊称号、隐藏弹幕池顶部。
 // @author       本地维护
 // @match        https://t.bilibili.com/*
 // @match        https://www.bilibili.com/video/*
@@ -30,6 +30,7 @@
         liveChatTop: "live.hideChatTop",
         liveQuality: "live.highestQuality",
         webFullscreenHotkey: "keyboard.webFullscreen",
+        videoDanmakuPanel: "video.danmakuPanel",
     };
     let settingsDialog = null;
     let cancelAutoWebMode = () => {};
@@ -41,6 +42,7 @@
     const liveChatTop = GM_getValue(SETTINGS.liveChatTop, true);
     const liveQuality = GM_getValue(SETTINGS.liveQuality, true);
     const webFullscreenHotkey = GM_getValue(SETTINGS.webFullscreenHotkey, true);
+    const videoDanmakuPanel = GM_getValue(SETTINGS.videoDanmakuPanel, true);
     const isVideoPage = window.location.hostname === "www.bilibili.com"
         && (window.location.pathname.startsWith("/video/")
             || /^\/list\/watchlater\/?$/.test(window.location.pathname));
@@ -49,6 +51,7 @@
 
     if (window.location.hostname === "t.bilibili.com" && blockProfile) blockUserProfile();
     if (isVideoPage && autoFullscreen) startWebFullscreen();
+    if (isVideoPage && videoDanmakuPanel) startVideoDanmakuPanel();
     if (isLivePage) {
         if (liveBadges) hideLiveChatBadges();
         if (liveChatTop) hideLiveChatTop();
@@ -132,6 +135,7 @@
             ["直播弹幕装饰屏蔽", SETTINGS.liveBadges, "隐藏等级、粉丝牌和特殊称号"],
             ["直播弹幕池顶部屏蔽", SETTINGS.liveChatTop, "隐藏排行、活动及顶部覆盖层，扩展聊天区"],
             ["T 键切换网页全屏", SETTINGS.webFullscreenHotkey, "视频、稍后观看和直播；输入时不触发"],
+            ["视频右侧弹幕池", SETTINGS.videoDanmakuPanel, "网页全屏时随进度滚动，保留画面飘屏弹幕"],
         ];
         const inputs = new Map();
         const list = shadow.querySelector(".options");
@@ -177,6 +181,322 @@
         window.addEventListener("pagehide", dismiss, { once: true });
         document.body.appendChild(host);
         dialog.showModal();
+    }
+
+    function readDanmakuSegment(buffer) {
+        const bytes = new Uint8Array(buffer);
+        const decoder = new TextDecoder();
+        let cursor = 0;
+        function integer(end) {
+            let value = 0;
+            for (let shift = 0; shift < 70 && cursor < end; shift += 7) {
+                const byte = bytes[cursor++];
+                value += (byte & 127) * 2 ** shift;
+                if (!(byte & 128)) return value;
+            }
+            throw new Error("Invalid danmaku varint");
+        }
+        function field(end) {
+            const tag = integer(end), type = tag % 8;
+            if (!tag) throw new Error("Invalid danmaku tag");
+            if (type === 0) return { id: Math.floor(tag / 8), value: integer(end) };
+            const length = type === 2 ? integer(end) : type === 1 ? 8 : type === 5 ? 4 : -1;
+            if (length < 0 || !Number.isSafeInteger(length) || cursor + length > end) {
+                throw new Error("Invalid danmaku field");
+            }
+            const start = cursor;
+            cursor += length;
+            return { id: Math.floor(tag / 8), start, end: cursor, type };
+        }
+        const result = [];
+        while (cursor < bytes.length) {
+            const outer = field(bytes.length);
+            if (outer.id !== 1 || outer.type !== 2) continue;
+            cursor = outer.start;
+            let time = 0, mode = 0, text = "";
+            while (cursor < outer.end) {
+                const item = field(outer.end);
+                if (item.id === 2 && item.value !== undefined) time = item.value / 1000;
+                if (item.id === 3 && item.value !== undefined) mode = item.value;
+                if (item.id === 7 && item.type === 2) text = decoder.decode(bytes.subarray(item.start, item.end));
+            }
+            // 只显示普通滚动/顶部/底部弹幕，不把高级弹幕的脚本或 JSON 当成正文。
+            if (Number.isFinite(time) && time >= 0 && mode >= 1 && mode <= 6 && text.trim()) {
+                result.push({ time, text });
+            }
+        }
+        return result.sort((a, b) => a.time - b.time);
+    }
+
+    function danmakuBetween(segments, after, until, limit = 250) {
+        const result = [];
+        function upperBound(items, time) {
+            let low = 0, high = items.length;
+            while (low < high) {
+                const middle = (low + high) >>> 1;
+                if (items[middle].time <= time) low = middle + 1;
+                else high = middle;
+            }
+            return low;
+        }
+        for (const items of segments) {
+            const end = upperBound(items, until);
+            const start = Math.max(upperBound(items, after), end - limit);
+            result.push(...items.slice(start, end));
+        }
+        return result.sort((a, b) => a.time - b.time).slice(-limit);
+    }
+
+    function startVideoDanmakuPanel() {
+        const SEGMENT_SECONDS = 360, HISTORY_SECONDS = 60, MAX_ROWS = 250;
+        let stopped = false, player = null, video = null, host = null, shadow = null;
+        let session = null, lastTime = null, following = true;
+        GM_addStyle(`
+            .bpx-player-container[data-screen="web"][data-bilibiliex-chat] {
+                width: calc(100% - clamp(260px, 24vw, 360px)) !important;
+                right: clamp(260px, 24vw, 360px) !important;
+            }
+        `);
+
+        function videoKey() {
+            const url = new URL(window.location.href);
+            if (url.hostname !== "www.bilibili.com") return null;
+            const match = url.pathname.match(/^\/video\/(BV[\da-z]+|av\d+)\/?$/i);
+            const id = match?.[1] || (/^\/list\/watchlater\/?$/.test(url.pathname) ? url.searchParams.get("bvid") : null);
+            if (!id || !/^(?:BV[\da-z]+|av\d+)$/i.test(id)) return null;
+            const part = Math.max(1, Math.trunc(Number(url.searchParams.get("p")) || 1));
+            return { id, part, key: `${id}:${part}` };
+        }
+
+        function clock(time) {
+            const seconds = Math.max(0, Math.floor(time || 0));
+            return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+        }
+
+        function createPanel() {
+            host = document.createElement("div");
+            host.id = "bilibiliex-danmaku-host";
+            host.hidden = true;
+            shadow = host.attachShadow({ mode: "open" });
+            shadow.innerHTML = `
+                <style>
+                    :host { all: initial; position: fixed !important; top: 0; right: 0;
+                        width: clamp(260px, 24vw, 360px); height: 100dvh; z-index: 100001;
+                        background: #fff; color: #30343b; font: 14px/1.65 system-ui,"Microsoft YaHei",sans-serif;
+                        color-scheme: light; display: block; }
+                    :host([hidden]) { display: none !important; }
+                    * { box-sizing: border-box; }
+                    .panel { display: flex; flex-direction: column; height: 100%; border-left: 1px solid #e7e9ed; }
+                    header { display: flex; align-items: center; justify-content: space-between;
+                        gap: 8px; padding: 16px; border-bottom: 1px solid #e7e9ed; flex-shrink: 0; }
+                    h2 { margin: 0; font-size: 15px; font-weight: 650; }
+                    .clock { color: #9499a0; font-size: 12px; font-variant-numeric: tabular-nums; }
+                    button { font: inherit; cursor: pointer; border: 1px solid #e7e9ed;
+                        border-radius: 6px; background: #fff; color: #61666d; padding: 3px 8px; font-size: 12px; }
+                    button:focus-visible { outline: 2px solid #e84b83; outline-offset: 2px; }
+                    .scroll { flex: 1 1 0; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 12px 14px; }
+                    .empty { padding: 24px 4px; text-align: center; color: #9499a0; font-size: 13px; }
+                    ol { list-style: none; padding: 0; margin: 0; }
+                    li { padding: 7px 2px; overflow-wrap: anywhere; }
+                    time { margin-right: 8px; font-size: 11px; color: #9499a0; font-variant-numeric: tabular-nums; }
+                    footer { border-top: 1px solid #e7e9ed; padding: 10px 14px; flex-shrink: 0; }
+                    footer p { color: #9499a0; font-size: 11px; margin: 5px 0 0; }
+                    .latest { width: 100%; padding: 7px; color: #e84b83; }
+                    [hidden] { display: none !important; }
+                </style>
+                <section class="panel" aria-label="右侧同步弹幕池">
+                    <header><div><h2 title="独立读取普通弹幕，不继承播放器的智能屏蔽和屏蔽词">同步弹幕</h2>
+                        <span class="clock">随播放进度显示</span></div><button class="retry" type="button">重载</button></header>
+                    <div class="scroll" tabindex="0" aria-label="弹幕滚动区域"><div class="empty" role="status">正在读取弹幕…</div>
+                        <ol aria-label="已播放的弹幕" aria-live="off"></ol></div>
+                    <footer><button class="latest" type="button" hidden>回到最新弹幕</button>
+                        <p>发送弹幕请用播放器输入框</p></footer>
+                </section>`;
+            shadow.querySelector(".scroll").addEventListener("scroll", () => {
+                const box = shadow.querySelector(".scroll");
+                following = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+                shadow.querySelector(".latest").hidden = following;
+            }, { passive: true });
+            shadow.querySelector(".latest").addEventListener("click", () => {
+                following = true;
+                render(true);
+                followLatest();
+            });
+            shadow.querySelector(".retry").addEventListener("click", () => {
+                session?.controller.abort();
+                session = null;
+                monitor();
+            });
+            document.body.appendChild(host);
+        }
+
+        function followLatest() {
+            if (!following || !shadow) return;
+            const box = shadow.querySelector(".scroll");
+            box.scrollTop = box.scrollHeight;
+            shadow.querySelector(".latest").hidden = true;
+        }
+
+        function emptyMessage(text) {
+            if (!shadow) return;
+            const empty = shadow.querySelector(".empty");
+            empty.textContent = text;
+            empty.hidden = !!shadow.querySelector("ol").children.length;
+        }
+
+        async function request(url, kind, current) {
+            const controller = new AbortController();
+            const abort = () => controller.abort();
+            current.controller.signal.addEventListener("abort", abort, { once: true });
+            const timeout = setTimeout(abort, 15000);
+            try {
+                if (current.controller.signal.aborted) controller.abort();
+                const response = await fetch(url, { credentials: "include", signal: controller.signal });
+                if (!response.ok) throw new Error("Danmaku request failed");
+                if (kind === "json") return await response.json();
+                if ((response.headers.get("content-type") || "").includes("json")) throw new Error("Danmaku unavailable");
+                return await response.arrayBuffer();
+            } finally {
+                clearTimeout(timeout);
+                current.controller.signal.removeEventListener("abort", abort);
+            }
+        }
+
+        function loadSegment(index, current) {
+            if (index < 1 || (current.duration && (index - 1) * SEGMENT_SECONDS >= current.duration)) return;
+            if (current.segments.has(index) || current.pending >= 3) return;
+            const entry = { data: null, failed: false };
+            current.segments.set(index, entry);
+            current.pending++;
+            const url = `https://api.bilibili.com/x/v2/dm/web/seg.so?type=1&oid=${current.cid}&segment_index=${index}`;
+            void request(url, "buffer", current).then(buffer => {
+                if (session !== current || stopped) return;
+                entry.data = readDanmakuSegment(buffer);
+                const at = Math.floor((video?.currentTime || 0) / SEGMENT_SECONDS) + 1;
+                // 预取的未来段不重建列表，避免用户翻看历史时发生跳动。
+                if (index === at || index === at - 1) render(following);
+            }).catch(() => {
+                if (session !== current || stopped) return;
+                entry.failed = true;
+                render(false);
+            }).finally(() => { current.pending--; });
+        }
+
+        async function loadVideo(route) {
+            const current = { ...route, controller: new AbortController(), segments: new Map(), cid: null, duration: 0, failed: false, pending: 0 };
+            session?.controller.abort();
+            session = current;
+            lastTime = null;
+            following = true;
+            shadow.querySelector("ol").replaceChildren();
+            emptyMessage("正在读取弹幕…");
+            try {
+                const query = /^av/i.test(route.id) ? `aid=${route.id.slice(2)}` : `bvid=${route.id}`;
+                const result = await request(`https://api.bilibili.com/x/web-interface/view?${query}`, "json", current);
+                if (stopped || session !== current) return;
+                if (result.code !== 0) throw new Error("Video metadata unavailable");
+                const part = result.data?.pages?.find(item => item.page === route.part);
+                if (!part || !/^\d+$/.test(String(part.cid)) || Number(part.cid) <= 0) throw new Error("Video part unavailable");
+                current.cid = part.cid;
+                current.duration = Number(part.duration) || 0;
+                render(true);
+            } catch {
+                if (!stopped && session === current) {
+                    current.failed = true;
+                    emptyMessage("弹幕暂时无法加载，点击右上角重载");
+                }
+            }
+        }
+
+        function render(rebuild = false) {
+            if (stopped || document.visibilityState === "hidden" || !host || host.hidden || !video || !session?.cid) return;
+            if (videoKey()?.key !== session.key) return;
+            const time = Math.max(0, video.currentTime || 0), current = session;
+            shadow.querySelector(".clock").textContent = `当前 ${clock(time)}`;
+            const index = Math.floor(time / SEGMENT_SECONDS) + 1;
+            loadSegment(index, current);
+            if (time % SEGMENT_SECONDS < HISTORY_SECONDS) loadSegment(index - 1, current);
+            // 接近分段末尾时预取下一段，跳转时直接请求目标段，不逐段追赶。
+            if (time % SEGMENT_SECONDS > SEGMENT_SECONDS - 30) loadSegment(index + 1, current);
+            for (const key of current.segments.keys()) if (Math.abs(key - index) > 2) current.segments.delete(key);
+            rebuild ||= lastTime === null || time < lastTime || time - lastTime > 2;
+            const after = rebuild ? Math.max(-1, time - HISTORY_SECONDS) : lastTime;
+            const messages = danmakuBetween([...current.segments.values()].map(entry => entry.data || []), after, time, MAX_ROWS);
+            const list = shadow.querySelector("ol");
+            if (rebuild) list.replaceChildren();
+            const fragment = document.createDocumentFragment();
+            for (const item of messages) {
+                const row = document.createElement("li"), timestamp = document.createElement("time"), text = document.createElement("span");
+                timestamp.textContent = clock(item.time);
+                text.textContent = item.text;
+                row.append(timestamp, text);
+                fragment.appendChild(row);
+            }
+            list.appendChild(fragment);
+            while (list.children.length > MAX_ROWS) list.firstElementChild.remove();
+            lastTime = time;
+            const segment = current.segments.get(index);
+            emptyMessage(segment?.failed ? "弹幕暂时无法加载，点击右上角重载" : segment?.data
+                ? "当前进度暂无弹幕，播放后将随进度显示" : "正在读取弹幕…");
+            followLatest();
+        }
+
+        function onProgress() { render(false); }
+        function onSeek() { following = true; render(true); }
+        function detach() {
+            player?.removeAttribute("data-bilibiliex-chat");
+            for (const type of ["timeupdate", "seeking", "seeked", "loadedmetadata", "emptied"]) {
+                video?.removeEventListener(type, type === "timeupdate" ? onProgress : onSeek);
+            }
+            video = null;
+            player = null;
+        }
+
+        function monitor() {
+            if (stopped || !document.body || document.visibilityState === "hidden") return;
+            const nextPlayer = document.querySelector(".bpx-player-container"), nextVideo = nextPlayer?.querySelector("video");
+            if (player !== nextPlayer || video !== nextVideo) {
+                detach();
+                player = nextPlayer;
+                video = nextVideo;
+                for (const type of ["timeupdate", "seeking", "seeked", "loadedmetadata", "emptied"]) {
+                    video?.addEventListener(type, type === "timeupdate" ? onProgress : onSeek);
+                }
+                lastTime = null;
+            }
+            const route = videoKey();
+            const active = !!(route && video && player?.getAttribute("data-screen") === "web"
+                && !document.fullscreenElement && window.innerWidth >= 900);
+            if (!host && active) createPanel();
+            if (host) host.hidden = !active;
+            if (active) {
+                player.setAttribute("data-bilibiliex-chat", "");
+                if (session?.key !== route.key) void loadVideo(route);
+                else render(false);
+            } else {
+                player?.removeAttribute("data-bilibiliex-chat");
+                if (!route || (session && route.key !== session.key)) {
+                    session?.controller.abort();
+                    session = null;
+                }
+            }
+        }
+
+        function stop() {
+            stopped = true;
+            clearInterval(timer);
+            session?.controller.abort();
+            detach();
+            host?.remove();
+            document.removeEventListener("visibilitychange", monitor);
+            window.removeEventListener("resize", monitor);
+            window.removeEventListener("pagehide", stop);
+        }
+        const timer = setInterval(monitor, 500);
+        document.addEventListener("visibilitychange", monitor);
+        window.addEventListener("resize", monitor);
+        window.addEventListener("pagehide", stop);
+        monitor();
     }
 
     function startWebFullscreenHotkey() {

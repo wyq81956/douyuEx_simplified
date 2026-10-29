@@ -16,6 +16,7 @@ function boot(options = {}) {
     const values = {
         "video.autoWebFullscreen": false, "live.autoWebMode": false,
         "live.hideChatBadges": false, "live.hideChatTop": false, "live.highestQuality": false,
+        "video.danmakuPanel": false,
         ...options.values,
     };
     function events(prefix) {
