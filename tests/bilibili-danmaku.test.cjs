@@ -9,8 +9,8 @@ const context = {
     window: { location: { hostname: "www.bilibili.com", pathname: "/video/BVfixture/" } },
     GM_getValue: () => false, GM_registerMenuCommand() {}, TextDecoder,
 };
-vm.runInNewContext(source.replace(/\}\)\(\);\s*$/, "globalThis.danmakuTest = { readDanmakuSegment, danmakuBetween }; })();"), context);
-const { readDanmakuSegment, danmakuBetween } = context.danmakuTest;
+vm.runInNewContext(source.replace(/\}\)\(\);\s*$/, "globalThis.danmakuTest = { readDanmakuSegment, danmakuBetween, danmakuPanelWidth }; })();"), context);
+const { readDanmakuSegment, danmakuBetween, danmakuPanelWidth } = context.danmakuTest;
 const decode = bytes => JSON.parse(JSON.stringify(readDanmakuSegment(bytes)));
 const select = (...args) => JSON.parse(JSON.stringify(danmakuBetween(...args)));
 
@@ -43,4 +43,14 @@ assert.deepEqual(select([first, second], -1, 2).map(item => item.text), ["零", 
 const busy = Array.from({ length: 1000 }, (_, i) => ({ time: i / 10, text: String(i) }));
 assert.equal(select([busy], -1, 100).length, 250);
 assert.equal(select([busy], -1, 100)[0].text, "750");
+assert.equal(danmakuPanelWidth(1280, null), 307);
+assert.equal(danmakuPanelWidth(1920, null), 360);
+assert.equal(danmakuPanelWidth(1280, 480), 480);
+assert.equal(danmakuPanelWidth(1280, 900), 600);
+assert.equal(danmakuPanelWidth(1280, 10), 240);
+assert.equal(danmakuPanelWidth(960, 600), 320); // 给视频保留至少 640px。
+assert.equal(danmakuPanelWidth(900, null), 260);
+assert.equal(danmakuPanelWidth(1280, "480"), 307);
+assert.equal(danmakuPanelWidth(1280, NaN), 307);
+assert.equal(danmakuPanelWidth(1280, Infinity), 307);
 console.log("Passed: native danmaku protobuf fields, modes, unknown fields, malformed data, exact progress boundaries, pause deduplication, seeking and row limits.");

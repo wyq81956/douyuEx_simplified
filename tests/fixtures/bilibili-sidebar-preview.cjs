@@ -15,7 +15,7 @@ function message(time, text, mode = 1) {
     const body = Buffer.concat([integer(16), integer(time * 1000), integer(24), integer(mode), integer(58), integer(content.length), content]);
     return Buffer.concat([integer(10), integer(body.length), body]);
 }
-const lines = ["弹幕池已和播放进度同步", "右侧显示的是已经播放到的弹幕", "暂停时，弹幕也会停在当前进度", "原来的飘屏弹幕开关保持独立", "可以向上翻看刚才的弹幕", "跳转进度后会重新对齐", "每一行都带有视频时间", "退出网页全屏会恢复原布局", "这里是本地浏览器测试页", "也支持稍后观看播放页", "长视频按分段读取弹幕", "试试看 T 键切换", "画面和弹幕各自占用空间", "不会遮挡播放器控制栏", "播放进度就是弹幕的时间轴", "拖动进度条可以验证跳转", "向上翻看时停止自动滚动", "回到最新按钮会恢复跟随", "播放器输入框仍然可以使用", "分P切换后不会混入旧弹幕", "同步弹幕测试进行中", "所有文本都按普通文字显示", "桌面宽屏下使用双栏布局", "普通模式下恢复网站原来的样子", "每个分段只读取一次"];
+const lines = ["弹幕池已和播放进度同步", "右侧显示的是已经播放到的弹幕", "暂停时，弹幕也会停在当前进度", "原来的飘屏弹幕开关保持独立", "可以向上翻看刚才的弹幕", "跳转进度后会重新对齐", "只显示弹幕正文，更简洁", "退出网页全屏会恢复原布局", "这里是本地浏览器测试页", "也支持稍后观看播放页", "长视频按分段读取弹幕", "试试看 T 键切换", "画面和弹幕各自占用空间", "不会遮挡播放器控制栏", "播放进度就是弹幕的时间轴", "拖动进度条可以验证跳转", "向上翻看时停止自动滚动", "回到最新按钮会恢复跟随", "播放器输入框仍然可以使用", "分P切换后不会混入旧弹幕", "同步弹幕测试进行中", "所有文本都按普通文字显示", "桌面宽屏下使用双栏布局", "普通模式下恢复网站原来的样子", "每个分段只读取一次"];
 
 function createPreviewServer() {
     const wav = Buffer.alloc(44 + 8000 * 780, 128);
@@ -73,8 +73,8 @@ function createPreviewServer() {
             document.querySelector('#part2').onclick=()=>{history.pushState({},'', '?p=2');video.currentTime=5};
             document.querySelector('#nextvideo').onclick=()=>{history.pushState({},'', '/video/BVnext/');video.currentTime=5};
             for(const action of ['fail','recover'])document.querySelector('#'+action).onclick=async()=>{await fetch('/fixture/'+action);document.body.dataset.api=action};
-            window.GM_getValue=(key,fallback)=>['video.danmakuPanel','keyboard.webFullscreen'].includes(key)?true:false;
-            window.GM_setValue=()=>{};window.GM_registerMenuCommand=()=>{};window.GM_addStyle=css=>{const style=document.createElement('style');style.textContent=css;document.head.appendChild(style)};
+            window.GM_getValue=(key,fallback)=>{const saved=localStorage.getItem(key);return saved!==null?JSON.parse(saved):key==='video.danmakuPanelWidth'?fallback:['video.danmakuPanel','keyboard.webFullscreen'].includes(key)};
+            window.GM_setValue=(key,value)=>{localStorage.setItem(key,JSON.stringify(value));document.body.dataset.savedWidth=String(value)};window.GM_registerMenuCommand=()=>{};window.GM_addStyle=css=>{const style=document.createElement('style');style.textContent=css;document.head.appendChild(style)};
             </script><script src="/script.js${url.searchParams.has("baseline") ? "?baseline=1" : ""}"></script></html>`);
     });
 }

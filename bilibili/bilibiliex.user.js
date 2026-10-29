@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         B站动态 - 屏蔽悬浮用户资料卡
 // @namespace    bilibiliex-simplified
-// @version      1.6.1
+// @version      1.7.0
 // @updateURL    https://github.com/wyq81956/douyuEx_simplified/releases/latest/download/bilibiliex.user.js
 // @downloadURL  https://github.com/wyq81956/douyuEx_simplified/releases/latest/download/bilibiliex.user.js
 // @description  动态页屏蔽资料卡；视频网页全屏右侧同步弹幕池；T键切换网页全屏；直播间自动网页模式和最高画质、隐藏弹幕等级和粉丝牌及特殊称号、隐藏弹幕池顶部。
@@ -31,6 +31,7 @@
         liveQuality: "live.highestQuality",
         webFullscreenHotkey: "keyboard.webFullscreen",
         videoDanmakuPanel: "video.danmakuPanel",
+        videoDanmakuWidth: "video.danmakuPanelWidth",
     };
     let settingsDialog = null;
     let cancelAutoWebMode = () => {};
@@ -247,10 +248,19 @@
         return result.sort((a, b) => a.time - b.time).slice(-limit);
     }
 
+    function danmakuPanelWidth(viewport, preferred) {
+        const maximum = Math.max(240, Math.min(600, viewport - 640));
+        const wanted = typeof preferred === "number" && Number.isFinite(preferred)
+            ? preferred : Math.max(260, Math.min(360, viewport * 0.24));
+        return Math.round(Math.max(240, Math.min(maximum, wanted)));
+    }
+
     function startVideoDanmakuPanel() {
         const SEGMENT_SECONDS = 360, HISTORY_SECONDS = 60, MAX_ROWS = 250;
         let stopped = false, player = null, video = null, host = null, shadow = null;
         let session = null, lastTime = null, following = true;
+        let preferredWidth = GM_getValue(SETTINGS.videoDanmakuWidth, null), resizeDrag = null;
+        const WIDTH_VAR = "--bilibiliex-danmaku-width";
         GM_addStyle(`
             .bpx-player-container[data-screen="web"][data-bilibiliex-chat] {
                 /* 原生网页全屏固定的是外层，内层仍是 relative，right 会把视频左移。 */
@@ -259,13 +269,17 @@
                 top: 0 !important;
                 right: auto !important;
                 bottom: auto !important;
-                width: calc(100vw - clamp(260px, 24vw, 360px)) !important;
+                width: calc(100vw - var(--bilibiliex-danmaku-width, clamp(260px, 24vw, 360px))) !important;
                 height: 100dvh !important;
                 min-width: 0 !important;
                 max-width: none !important;
                 max-height: none !important;
                 margin: 0 !important;
                 box-sizing: border-box !important;
+            }
+            html[data-bilibiliex-danmaku-resizing], html[data-bilibiliex-danmaku-resizing] * {
+                cursor: col-resize !important;
+                user-select: none !important;
             }
         `);
 
@@ -279,9 +293,82 @@
             return { id, part, key: `${id}:${part}` };
         }
 
-        function clock(time) {
-            const seconds = Math.max(0, Math.floor(time || 0));
-            return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+        function updateWidth() {
+            const width = danmakuPanelWidth(window.innerWidth, resizeDrag?.value ?? preferredWidth);
+            player?.style.setProperty(WIDTH_VAR, `${width}px`);
+            host?.style.setProperty(WIDTH_VAR, `${width}px`);
+            const handle = shadow?.querySelector(".resize-handle");
+            if (handle) {
+                handle.setAttribute("aria-valuemin", "240");
+                handle.setAttribute("aria-valuemax", String(danmakuPanelWidth(window.innerWidth, 600)));
+                handle.setAttribute("aria-valuenow", String(width));
+                handle.setAttribute("aria-valuetext", `${width} 像素`);
+            }
+        }
+
+        function endResize(commit = false) {
+            if (!resizeDrag) return;
+            const drag = resizeDrag;
+            resizeDrag = null;
+            const handle = shadow?.querySelector(".resize-handle");
+            handle?.removeAttribute("data-dragging");
+            document.documentElement.removeAttribute("data-bilibiliex-danmaku-resizing");
+            if (handle?.hasPointerCapture(drag.id)) handle.releasePointerCapture(drag.id);
+            if (commit) {
+                preferredWidth = danmakuPanelWidth(window.innerWidth, drag.value);
+                GM_setValue(SETTINGS.videoDanmakuWidth, preferredWidth);
+            }
+            updateWidth();
+        }
+
+        function cancelResize() { endResize(false); }
+        function resetWidth() {
+            cancelResize();
+            preferredWidth = null;
+            GM_setValue(SETTINGS.videoDanmakuWidth, null);
+            updateWidth();
+        }
+
+        function bindResize() {
+            const handle = shadow.querySelector(".resize-handle");
+            handle.addEventListener("pointerdown", event => {
+                if (event.button !== 0 || !event.isPrimary || resizeDrag || host.hidden) return;
+                event.preventDefault();
+                event.stopPropagation();
+                handle.focus({ preventScroll: true });
+                const width = host.getBoundingClientRect().width;
+                resizeDrag = { id: event.pointerId, x: event.clientX, width, value: width };
+                handle.setAttribute("data-dragging", "");
+                document.documentElement.setAttribute("data-bilibiliex-danmaku-resizing", "");
+                handle.setPointerCapture(event.pointerId);
+            });
+            handle.addEventListener("pointermove", event => {
+                if (resizeDrag?.id !== event.pointerId) return;
+                resizeDrag.value = danmakuPanelWidth(window.innerWidth, resizeDrag.width + resizeDrag.x - event.clientX);
+                updateWidth();
+            });
+            handle.addEventListener("pointerup", event => {
+                if (resizeDrag?.id === event.pointerId) endResize(true);
+            });
+            for (const type of ["pointercancel", "lostpointercapture"]) {
+                handle.addEventListener(type, event => {
+                    if (resizeDrag?.id === event.pointerId) cancelResize();
+                });
+            }
+            handle.addEventListener("dblclick", resetWidth);
+            handle.addEventListener("keydown", event => {
+                if (event.ctrlKey || event.metaKey || event.altKey) return;
+                if (!["ArrowLeft", "ArrowRight", "Home", "Escape"].includes(event.key)) return;
+                event.preventDefault();
+                event.stopPropagation();
+                if (event.key === "Escape") { cancelResize(); return; }
+                if (event.key === "Home") { resetWidth(); return; }
+                cancelResize();
+                const step = (event.shiftKey ? 50 : 10) * (event.key === "ArrowLeft" ? 1 : -1);
+                preferredWidth = danmakuPanelWidth(window.innerWidth, host.getBoundingClientRect().width + step);
+                GM_setValue(SETTINGS.videoDanmakuWidth, preferredWidth);
+                updateWidth();
+            });
         }
 
         function createPanel() {
@@ -292,32 +379,41 @@
             shadow.innerHTML = `
                 <style>
                     :host { all: initial; position: fixed !important; top: 0; right: 0;
-                        width: clamp(260px, 24vw, 360px); height: 100dvh; z-index: 100001;
-                        background: #fff; color: #30343b; font: 14px/1.65 system-ui,"Microsoft YaHei",sans-serif;
-                        color-scheme: light; display: block; }
+                        width: var(--bilibiliex-danmaku-width, clamp(260px, 24vw, 360px)); height: 100dvh; z-index: 100001;
+                        background: #18191c; color: #d5d8df; font: 14px/1.65 system-ui,"Microsoft YaHei",sans-serif;
+                        color-scheme: dark; display: block; }
                     :host([hidden]) { display: none !important; }
                     * { box-sizing: border-box; }
-                    .panel { display: flex; flex-direction: column; height: 100%; border-left: 1px solid #e7e9ed; }
+                    .panel { display: flex; flex-direction: column; height: 100%; border-left: 1px solid #30323a; }
+                    .resize-handle { position: absolute; top: 0; bottom: 0; left: -5px; width: 10px;
+                        cursor: col-resize; touch-action: none; outline-offset: -2px; z-index: 1; }
+                    .resize-handle::after { content: ''; position: absolute; left: 4px; top: 0; bottom: 0;
+                        width: 2px; background: #34363e; }
+                    .resize-handle:hover::after, .resize-handle:focus-visible::after,
+                    .resize-handle[data-dragging]::after { background: #e84b83; }
                     header { display: flex; align-items: center; justify-content: space-between;
-                        gap: 8px; padding: 16px; border-bottom: 1px solid #e7e9ed; flex-shrink: 0; }
+                        gap: 8px; padding: 16px; border-bottom: 1px solid #30323a; flex-shrink: 0; background: #202126; }
                     h2 { margin: 0; font-size: 15px; font-weight: 650; }
-                    .clock { color: #9499a0; font-size: 12px; font-variant-numeric: tabular-nums; }
-                    button { font: inherit; cursor: pointer; border: 1px solid #e7e9ed;
-                        border-radius: 6px; background: #fff; color: #61666d; padding: 3px 8px; font-size: 12px; }
+                    .hint { color: #959aa5; font-size: 12px; }
+                    button { font: inherit; cursor: pointer; border: 1px solid #3b3d46;
+                        border-radius: 6px; background: #27282e; color: #d5d8df; padding: 3px 8px; font-size: 12px; }
+                    button:hover { background: #34363e; }
                     button:focus-visible { outline: 2px solid #e84b83; outline-offset: 2px; }
-                    .scroll { flex: 1 1 0; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 12px 14px; }
-                    .empty { padding: 24px 4px; text-align: center; color: #9499a0; font-size: 13px; }
+                    .scroll { flex: 1 1 0; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 12px 14px;
+                        scrollbar-color: #565a64 #18191c; }
+                    .empty { padding: 24px 4px; text-align: center; color: #959aa5; font-size: 13px; }
                     ol { list-style: none; padding: 0; margin: 0; }
                     li { padding: 7px 2px; overflow-wrap: anywhere; }
-                    time { margin-right: 8px; font-size: 11px; color: #9499a0; font-variant-numeric: tabular-nums; }
-                    footer { border-top: 1px solid #e7e9ed; padding: 10px 14px; flex-shrink: 0; }
-                    footer p { color: #9499a0; font-size: 11px; margin: 5px 0 0; }
+                    footer { border-top: 1px solid #30323a; padding: 10px 14px; flex-shrink: 0; background: #202126; }
+                    footer p { color: #959aa5; font-size: 11px; margin: 5px 0 0; }
                     .latest { width: 100%; padding: 7px; color: #e84b83; }
                     [hidden] { display: none !important; }
                 </style>
+                <div class="resize-handle" role="separator" tabindex="0" aria-orientation="vertical"
+                    aria-label="调整弹幕池宽度" title="拖动调整宽度；双击或 Home 恢复默认；左右方向键微调"></div>
                 <section class="panel" aria-label="右侧同步弹幕池">
                     <header><div><h2 title="独立读取普通弹幕，不继承播放器的智能屏蔽和屏蔽词">同步弹幕</h2>
-                        <span class="clock">随播放进度显示</span></div><button class="retry" type="button">重载</button></header>
+                        <span class="hint">随播放进度同步</span></div><button class="retry" type="button">重载</button></header>
                     <div class="scroll" tabindex="0" aria-label="弹幕滚动区域"><div class="empty" role="status">正在读取弹幕…</div>
                         <ol aria-label="已播放的弹幕" aria-live="off"></ol></div>
                     <footer><button class="latest" type="button" hidden>回到最新弹幕</button>
@@ -339,6 +435,8 @@
                 monitor();
             });
             document.body.appendChild(host);
+            bindResize();
+            updateWidth();
         }
 
         function followLatest() {
@@ -423,7 +521,6 @@
             if (stopped || document.visibilityState === "hidden" || !host || host.hidden || !video || !session?.cid) return;
             if (videoKey()?.key !== session.key) return;
             const time = Math.max(0, video.currentTime || 0), current = session;
-            shadow.querySelector(".clock").textContent = `当前 ${clock(time)}`;
             const index = Math.floor(time / SEGMENT_SECONDS) + 1;
             loadSegment(index, current);
             if (time % SEGMENT_SECONDS < HISTORY_SECONDS) loadSegment(index - 1, current);
@@ -437,10 +534,9 @@
             if (rebuild) list.replaceChildren();
             const fragment = document.createDocumentFragment();
             for (const item of messages) {
-                const row = document.createElement("li"), timestamp = document.createElement("time"), text = document.createElement("span");
-                timestamp.textContent = clock(item.time);
+                const row = document.createElement("li"), text = document.createElement("span");
                 text.textContent = item.text;
-                row.append(timestamp, text);
+                row.append(text);
                 fragment.appendChild(row);
             }
             list.appendChild(fragment);
@@ -455,7 +551,9 @@
         function onProgress() { render(false); }
         function onSeek() { following = true; render(true); }
         function detach() {
+            cancelResize();
             player?.removeAttribute("data-bilibiliex-chat");
+            player?.style.removeProperty(WIDTH_VAR);
             for (const type of ["timeupdate", "seeking", "seeked", "loadedmetadata", "emptied"]) {
                 video?.removeEventListener(type, type === "timeupdate" ? onProgress : onSeek);
             }
@@ -464,7 +562,8 @@
         }
 
         function monitor() {
-            if (stopped || !document.body || document.visibilityState === "hidden") return;
+            if (stopped || !document.body) return;
+            if (document.visibilityState === "hidden") { cancelResize(); return; }
             const nextPlayer = document.querySelector(".bpx-player-container"), nextVideo = nextPlayer?.querySelector("video");
             if (player !== nextPlayer || video !== nextVideo) {
                 detach();
@@ -481,11 +580,14 @@
             if (!host && active) createPanel();
             if (host) host.hidden = !active;
             if (active) {
+                updateWidth();
                 player.setAttribute("data-bilibiliex-chat", "");
                 if (session?.key !== route.key) void loadVideo(route);
                 else render(false);
             } else {
+                cancelResize();
                 player?.removeAttribute("data-bilibiliex-chat");
+                player?.style.removeProperty(WIDTH_VAR);
                 if (!route || (session && route.key !== session.key)) {
                     session?.controller.abort();
                     session = null;
@@ -501,11 +603,13 @@
             host?.remove();
             document.removeEventListener("visibilitychange", monitor);
             window.removeEventListener("resize", monitor);
+            window.removeEventListener("blur", cancelResize);
             window.removeEventListener("pagehide", stop);
         }
         const timer = setInterval(monitor, 500);
         document.addEventListener("visibilitychange", monitor);
         window.addEventListener("resize", monitor);
+        window.addEventListener("blur", cancelResize);
         window.addEventListener("pagehide", stop);
         monitor();
     }
