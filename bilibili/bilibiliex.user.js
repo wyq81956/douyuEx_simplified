@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         B站动态 - 屏蔽悬浮用户资料卡
 // @namespace    bilibiliex-simplified
-// @version      1.6.0
+// @version      1.6.1
 // @updateURL    https://github.com/wyq81956/douyuEx_simplified/releases/latest/download/bilibiliex.user.js
 // @downloadURL  https://github.com/wyq81956/douyuEx_simplified/releases/latest/download/bilibiliex.user.js
 // @description  动态页屏蔽资料卡；视频网页全屏右侧同步弹幕池；T键切换网页全屏；直播间自动网页模式和最高画质、隐藏弹幕等级和粉丝牌及特殊称号、隐藏弹幕池顶部。
@@ -253,8 +253,19 @@
         let session = null, lastTime = null, following = true;
         GM_addStyle(`
             .bpx-player-container[data-screen="web"][data-bilibiliex-chat] {
-                width: calc(100% - clamp(260px, 24vw, 360px)) !important;
-                right: clamp(260px, 24vw, 360px) !important;
+                /* 原生网页全屏固定的是外层，内层仍是 relative，right 会把视频左移。 */
+                position: fixed !important;
+                left: 0 !important;
+                top: 0 !important;
+                right: auto !important;
+                bottom: auto !important;
+                width: calc(100vw - clamp(260px, 24vw, 360px)) !important;
+                height: 100dvh !important;
+                min-width: 0 !important;
+                max-width: none !important;
+                max-height: none !important;
+                margin: 0 !important;
+                box-sizing: border-box !important;
             }
         `);
 

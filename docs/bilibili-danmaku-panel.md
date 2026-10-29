@@ -29,3 +29,19 @@
 ## 尚待确认
 
 新增脚本在用户真实 B站页面中的最终布局、登录态、网站灰度改版和账号过滤差异尚待实际试用。已验证公开数据和受控浏览器行为，不将本机 fixture 的结果表述成真实页面端到端验证。
+
+## 1.6.1 网页全屏错位修复（2026-10-30）
+
+用户截图显示视频左侧裁切、视频和弹幕池之间露出原网页。对截图中的 `BV1nesd69EVX` 观察原生网页全屏，REA Evidence `ev_a4bea5d57e55214cacccfd83b0796b2e95ff3a6bcf5699737271b4b945d95566` 确认模式放在外层 `#bilibili-player.mode-webscreen`；普通样式文件读取确认该外层固定定位，播放器内层 `.bpx-player-container` 保持 `position: relative`。1.6.0 对内层设置 `right` 使其相对原位左移。此前 fixture 错把内层设为 fixed，漏掉了此问题。
+
+现将内层在功能开启且为网页全屏时明确设为 fixed，左上角为 0，`right/bottom: auto`，宽度按 `100vw` 减去弹幕池，使用视口高度并移除宽高上限。模式退出或收起弹幕池后选择器不再匹配，恢复原生样式。
+
+fixture 已改成原生的“固定外层 + 相对内层”，保留原网页背景，并独立读取实际 DOM 矩形来检查边界。地址追加 `?baseline=1` 可读取本地 Git 标签 `bilibili-v1.6.0` 的旧脚本进行对照。
+
+- 旧版复现：Evidence `ev_63d8d8d5acd7ea60ba968d3875ed35b04c80de7ee7bb194244589b5cd863568a`，1280px 视口下视频左边界 -307.2px，中间空隙 307.2px。
+- 修复及 T 键往返：Evidence `ev_5acf3ecbf4569d7bc8805e510b61fceed53beaecf8ea16ac12f527079578284a`，左边界 0px，中间空隙 0px；退出后恢复 800×500 原生矩形，再进入仍贴合。
+- 高分辨率：Evidence `ev_56c6f61b483202c82aaf25972517261a65ed4adebb2ccfd9cd7600ebdf6bbcbe`，1920px/DPR 2 视口下，视频 1560px 与侧栏起点 1560px 贴合。
+- 稍后观看：Evidence `ev_bc81cbc9771be9c500cbaa36c5b1fc5921fa443fbb6ad3febb8ae718c3a4618f`，左右边界贴合。
+- 窄窗口：Evidence `ev_2ea382d683047ed40b6ce88dfa49c76f52b61b10fcb24b43e9f66e02720a5e02`，侧栏收起，恢复 800×600 原生网页全屏矩形。
+
+全部自有浏览器已回收。修复已通过原生结构回归，用户实际页面的最终效果仍需更新后确认。
