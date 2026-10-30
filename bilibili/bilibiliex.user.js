@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         B站动态 - 屏蔽悬浮用户资料卡
 // @namespace    bilibiliex-simplified
-// @version      1.7.1
+// @version      1.8.0
 // @updateURL    https://github.com/wyq81956/douyuEx_simplified/releases/latest/download/bilibiliex.user.js
 // @downloadURL  https://github.com/wyq81956/douyuEx_simplified/releases/latest/download/bilibiliex.user.js
 // @description  动态页屏蔽资料卡；视频网页全屏右侧同步弹幕池；T键切换网页全屏；直播间自动网页模式和最高画质、隐藏弹幕等级和粉丝牌及特殊称号、隐藏弹幕池顶部。
@@ -32,6 +32,15 @@
         webFullscreenHotkey: "keyboard.webFullscreen",
         videoDanmakuPanel: "video.danmakuPanel",
         videoDanmakuWidth: "video.danmakuPanelWidth",
+        videoDanmakuFont: "video.danmakuFont",
+        videoDanmakuFontSize: "video.danmakuFontSize",
+    };
+    const DANMAKU_FONTS = {
+        system: ["系统默认", 'system-ui, "Microsoft YaHei", sans-serif'],
+        yahei: ["微软雅黑", '"Microsoft YaHei", sans-serif'],
+        heiti: ["黑体", 'SimHei, sans-serif'],
+        songti: ["宋体", 'SimSun, serif'],
+        kaiti: ["楷体", 'KaiTi, serif'],
     };
     let settingsDialog = null;
     let cancelAutoWebMode = () => {};
@@ -60,6 +69,15 @@
         if (liveQuality) startLiveHighestQuality();
     }
     if (webFullscreenHotkey && (isVideoPage || isLivePage)) startWebFullscreenHotkey();
+
+    function danmakuAppearance() {
+        const font = GM_getValue(SETTINGS.videoDanmakuFont, "system");
+        const size = GM_getValue(SETTINGS.videoDanmakuFontSize, 14);
+        return {
+            font: Object.hasOwn(DANMAKU_FONTS, font) ? font : "system",
+            size: typeof size === "number" && Number.isFinite(size) ? Math.max(12, Math.min(32, Math.round(size))) : 14,
+        };
+    }
 
     function openSettings() {
         if (!document.body) {
@@ -94,17 +112,20 @@
                 }
                 .name { display: block; font-weight: 550; }
                 .hint { display: block; margin-top: 2px; color: #687078; font-size: 12px; }
-                input {
+                input[type="checkbox"] {
                     appearance: none; flex: 0 0 38px; width: 38px; height: 22px;
                     margin: 0; border: 0; border-radius: 12px; background: #c6cbd0;
                     position: relative; cursor: pointer;
                 }
-                input::after {
+                input[type="checkbox"]::after {
                     content: ''; position: absolute; width: 16px; height: 16px;
                     top: 3px; left: 3px; border-radius: 50%; background: #fff;
                 }
-                input:checked { background: #e84b83; }
-                input:checked::after { left: 19px; }
+                input[type="checkbox"]:checked { background: #e84b83; }
+                input[type="checkbox"]:checked::after { left: 19px; }
+                select { max-width: 160px; padding: 5px 8px; border: 1px solid #d9dde1;
+                    border-radius: 6px; background: #fff; color: #202124; font: inherit; }
+                .font-preview { padding: 12px 0; color: #202124; line-height: 1.65; overflow-wrap: anywhere; }
                 :focus-visible { outline: 2px solid #cf356d; outline-offset: 3px; }
                 footer {
                     display: flex; justify-content: flex-end; gap: 10px;
@@ -118,7 +139,7 @@
                 <div class="panel">
                     <header>
                         <h2 id="settings-title">BilibiliEx 设置</h2>
-                        <p id="settings-description">调整后点击“保存并刷新”，使开关生效。</p>
+                        <p id="settings-description">调整后点击“保存并刷新”生效。</p>
                     </header>
                     <div class="options"></div>
                     <footer>
@@ -160,6 +181,44 @@
             list.appendChild(row);
             inputs.set(key, input);
         }
+        const appearance = danmakuAppearance();
+        function appearanceSelect(label, choices, value) {
+            const row = document.createElement("label");
+            row.className = "option";
+            const name = document.createElement("span");
+            name.className = "name";
+            name.textContent = label;
+            const select = document.createElement("select");
+            select.setAttribute("aria-label", label);
+            for (const [id, text] of choices) {
+                const option = document.createElement("option");
+                option.value = id;
+                option.textContent = text;
+                select.appendChild(option);
+            }
+            select.value = String(value);
+            row.append(name, select);
+            list.appendChild(row);
+            return select;
+        }
+        const fontSelect = appearanceSelect("视频弹幕池字体",
+            Object.entries(DANMAKU_FONTS).map(([id, [label]]) => [id, label]), appearance.font);
+        const sizeSelect = appearanceSelect("视频弹幕池字号",
+            Array.from({ length: 21 }, (_, i) => [String(i + 12), `${i + 12}px`]), appearance.size);
+        const preview = document.createElement("p");
+        preview.className = "font-preview";
+        preview.textContent = "弹幕预览：这是一条视频弹幕 ABC 123";
+        function updatePreview() {
+            preview.style.fontFamily = DANMAKU_FONTS[fontSelect.value][1];
+            preview.style.fontSize = `${sizeSelect.value}px`;
+        }
+        fontSelect.addEventListener("change", updatePreview);
+        sizeSelect.addEventListener("change", updatePreview);
+        updatePreview();
+        list.appendChild(preview);
+        const fontHint = document.createElement("p");
+        fontHint.textContent = "仅调整视频右侧弹幕池正文；字体未安装时使用系统替代字体。";
+        list.appendChild(fontHint);
         const dialog = shadow.querySelector("dialog");
         settingsDialog = dialog;
         function dismiss() { dialog.close(); }
@@ -177,6 +236,8 @@
         shadow.querySelector(".cancel").addEventListener("click", dismiss);
         shadow.querySelector(".save").addEventListener("click", () => {
             for (const [key, input] of inputs) GM_setValue(key, input.checked);
+            GM_setValue(SETTINGS.videoDanmakuFont, fontSelect.value);
+            GM_setValue(SETTINGS.videoDanmakuFontSize, Number(sizeSelect.value));
             window.location.reload();
         });
         window.addEventListener("pagehide", dismiss, { once: true });
@@ -375,6 +436,9 @@
             host = document.createElement("div");
             host.id = "bilibiliex-danmaku-host";
             host.hidden = true;
+            const appearance = danmakuAppearance();
+            host.style.setProperty("--bilibiliex-danmaku-font", DANMAKU_FONTS[appearance.font][1]);
+            host.style.setProperty("--bilibiliex-danmaku-font-size", `${appearance.size}px`);
             shadow = host.attachShadow({ mode: "open" });
             shadow.innerHTML = `
                 <style>
@@ -399,7 +463,8 @@
                     button:hover { background: #34363e; }
                     button:focus-visible { outline: 2px solid #e84b83; outline-offset: 2px; }
                     .scroll { flex: 1 1 0; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 6px 8px;
-                        scrollbar-width: none; }
+                        scrollbar-width: none; font-family: var(--bilibiliex-danmaku-font, system-ui, sans-serif);
+                        font-size: var(--bilibiliex-danmaku-font-size, 14px); }
                     .scroll::-webkit-scrollbar { display: none; width: 0; height: 0; }
                     .empty { padding: 24px 4px; text-align: center; color: #959aa5; font-size: 13px; }
                     ol { list-style: none; padding: 0; margin: 0; }

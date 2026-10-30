@@ -51,7 +51,8 @@ function boot(saved = {}) {
     Object.defineProperty(window, "innerWidth", { get: () => viewport });
     vm.runInNewContext(source, {
         document, window, URL, AbortController, TextDecoder, setTimeout, clearTimeout,
-        GM_getValue: (key, fallback) => key === keys ? (key in values ? values[key] : fallback) : key === "video.danmakuPanel",
+        GM_getValue: (key, fallback) => key in values ? values[key] : key === keys ? fallback
+            : key === "video.danmakuPanel" ? true : fallback === true ? false : fallback,
         GM_setValue: (key, value) => { values[key] = value; writes.push([key, value]); },
         GM_registerMenuCommand() {}, GM_addStyle() {},
         setInterval: fn => { intervals.set(1, fn); return 1; }, clearInterval: id => intervals.delete(id),
@@ -76,6 +77,8 @@ function boot(saved = {}) {
 (async () => {
     const key = "video.danmakuPanelWidth";
     let t = boot(); await t.flush();
+    assert.equal(t.host.props.get("--bilibiliex-danmaku-font-size"), "14px");
+    assert.match(t.host.props.get("--bilibiliex-danmaku-font"), /system-ui/);
     assert.equal(t.width(), 307);
     t.dragStart(); t.dragMove(800);
     assert.equal(t.width(), 480);
@@ -105,5 +108,11 @@ function boot(saved = {}) {
     assert.equal(t.values[key], null); assert.equal(t.host.hidden, true);
     assert.equal(t.document.documentElement.getAttribute("data-bilibiliex-danmaku-resizing"), null);
     t.resize(1280); assert.equal(t.width(), 307); t.hide();
+    t = boot({ "video.danmakuFont": "kaiti", "video.danmakuFontSize": 22 }); await t.flush();
+    assert.equal(t.host.props.get("--bilibiliex-danmaku-font-size"), "22px");
+    assert.match(t.host.props.get("--bilibiliex-danmaku-font"), /KaiTi/); t.hide();
+    t = boot({ "video.danmakuFont": "unknown", "video.danmakuFontSize": "22" }); await t.flush();
+    assert.equal(t.host.props.get("--bilibiliex-danmaku-font-size"), "14px");
+    assert.match(t.host.props.get("--bilibiliex-danmaku-font"), /system-ui/); t.hide();
     console.log("Passed: simulated pointer resize, save-on-release, cancellation, keyboard/reset, reload persistence, viewport clamps and cleanup.");
 })().catch(error => { console.error(error); process.exitCode = 1; });
