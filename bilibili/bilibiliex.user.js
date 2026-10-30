@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         B站动态 - 屏蔽悬浮用户资料卡
 // @namespace    bilibiliex-simplified
-// @version      1.7.0
+// @version      1.7.1
 // @updateURL    https://github.com/wyq81956/douyuEx_simplified/releases/latest/download/bilibiliex.user.js
 // @downloadURL  https://github.com/wyq81956/douyuEx_simplified/releases/latest/download/bilibiliex.user.js
 // @description  动态页屏蔽资料卡；视频网页全屏右侧同步弹幕池；T键切换网页全屏；直播间自动网页模式和最高画质、隐藏弹幕等级和粉丝牌及特殊称号、隐藏弹幕池顶部。
@@ -392,32 +392,29 @@
                     .resize-handle:hover::after, .resize-handle:focus-visible::after,
                     .resize-handle[data-dragging]::after { background: #e84b83; }
                     header { display: flex; align-items: center; justify-content: space-between;
-                        gap: 8px; padding: 16px; border-bottom: 1px solid #30323a; flex-shrink: 0; background: #202126; }
-                    h2 { margin: 0; font-size: 15px; font-weight: 650; }
-                    .hint { color: #959aa5; font-size: 12px; }
+                        gap: 8px; padding: 4px 8px; border-bottom: 1px solid #30323a; flex-shrink: 0; background: #202126; }
+                    h2 { margin: 0; font-size: 14px; font-weight: 650; }
                     button { font: inherit; cursor: pointer; border: 1px solid #3b3d46;
-                        border-radius: 6px; background: #27282e; color: #d5d8df; padding: 3px 8px; font-size: 12px; }
+                        border-radius: 6px; background: #27282e; color: #d5d8df; padding: 1px 6px; font-size: 12px; }
                     button:hover { background: #34363e; }
                     button:focus-visible { outline: 2px solid #e84b83; outline-offset: 2px; }
-                    .scroll { flex: 1 1 0; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 12px 14px;
-                        scrollbar-color: #565a64 #18191c; }
+                    .scroll { flex: 1 1 0; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 6px 8px;
+                        scrollbar-width: none; }
+                    .scroll::-webkit-scrollbar { display: none; width: 0; height: 0; }
                     .empty { padding: 24px 4px; text-align: center; color: #959aa5; font-size: 13px; }
                     ol { list-style: none; padding: 0; margin: 0; }
-                    li { padding: 7px 2px; overflow-wrap: anywhere; }
-                    footer { border-top: 1px solid #30323a; padding: 10px 14px; flex-shrink: 0; background: #202126; }
-                    footer p { color: #959aa5; font-size: 11px; margin: 5px 0 0; }
-                    .latest { width: 100%; padding: 7px; color: #e84b83; }
+                    li { padding: 3.5px 0; overflow-wrap: anywhere; }
+                    .latest { margin: 6px 8px; padding: 4px; flex-shrink: 0; color: #e84b83; }
                     [hidden] { display: none !important; }
                 </style>
                 <div class="resize-handle" role="separator" tabindex="0" aria-orientation="vertical"
                     aria-label="调整弹幕池宽度" title="拖动调整宽度；双击或 Home 恢复默认；左右方向键微调"></div>
                 <section class="panel" aria-label="右侧同步弹幕池">
-                    <header><div><h2 title="独立读取普通弹幕，不继承播放器的智能屏蔽和屏蔽词">同步弹幕</h2>
-                        <span class="hint">随播放进度同步</span></div><button class="retry" type="button">重载</button></header>
+                    <header><h2 title="独立读取普通弹幕，不继承播放器的智能屏蔽和屏蔽词">同步弹幕</h2>
+                        <button class="retry" type="button">重载</button></header>
                     <div class="scroll" tabindex="0" aria-label="弹幕滚动区域"><div class="empty" role="status">正在读取弹幕…</div>
                         <ol aria-label="已播放的弹幕" aria-live="off"></ol></div>
-                    <footer><button class="latest" type="button" hidden>回到最新弹幕</button>
-                        <p>发送弹幕请用播放器输入框</p></footer>
+                    <button class="latest" type="button" hidden>回到最新弹幕</button>
                 </section>`;
             shadow.querySelector(".scroll").addEventListener("scroll", () => {
                 const box = shadow.querySelector(".scroll");
