@@ -250,7 +250,7 @@ function boot(options = {}) {
     t = boot({ hostname: "t.bilibili.com", pathname: "/" });
     assert.equal(t.styles.length, 1);
     assert.equal(t.timers.size, 0);
-    for (const pathname of ["/video/BVtest/", "/list/watchlater/"]) {
+    for (const pathname of ["/video/BVtest/", "/list/watchlater/", "/list/watchlater"]) {
         t = boot({ hostname: "www.bilibili.com", pathname });
         assert.deepEqual(t.clicks, ["视频网页全屏"]);
         assert.equal(t.styles.length, 0);

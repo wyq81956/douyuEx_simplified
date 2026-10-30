@@ -4,10 +4,10 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs"), path = require("node:path"), vm = require("node:vm");
 const source = fs.readFileSync(path.join(__dirname, "../bilibili/bilibiliex.user.js"), "utf8");
 
-function boot(saved = {}) {
+function boot(saved = {}, href = "https://www.bilibili.com/video/BVfixture/") {
     let viewport = 1280;
     const intervals = new Map(), writes = [], keys = "video.danmakuPanelWidth";
-    const values = { ...saved };
+    const values = { ...saved }, requests = [];
     class Element {
         constructor(tag = "div") {
             this.tag = tag; this.children = []; this.attributes = new Map(); this.events = new Map(); this.props = new Map();
@@ -47,7 +47,7 @@ function boot(saved = {}) {
     document.querySelector = () => player;
     document.createElement = tag => new Element(tag);
     document.createDocumentFragment = () => new Element("fragment");
-    window.location = { hostname: "www.bilibili.com", pathname: "/video/BVfixture/", href: "https://www.bilibili.com/video/BVfixture/" };
+    window.location = new URL(href);
     Object.defineProperty(window, "innerWidth", { get: () => viewport });
     vm.runInNewContext(source, {
         document, window, URL, AbortController, TextDecoder, setTimeout, clearTimeout,
@@ -56,13 +56,13 @@ function boot(saved = {}) {
         GM_setValue: (key, value) => { values[key] = value; writes.push([key, value]); },
         GM_registerMenuCommand() {}, GM_addStyle() {},
         setInterval: fn => { intervals.set(1, fn); return 1; }, clearInterval: id => intervals.delete(id),
-        fetch: async () => ({ ok: true, headers: { get: () => "application/octet-stream" },
+        fetch: async url => { requests.push(url); return { ok: true, headers: { get: () => "application/octet-stream" },
             json: async () => ({ code: 0, data: { pages: [{ page: 1, cid: 11, duration: 780 }] } }),
-            arrayBuffer: async () => new ArrayBuffer(0) }),
+            arrayBuffer: async () => new ArrayBuffer(0) }; },
     });
     const host = document.body.children[0], handle = host.shadow.querySelector(".resize-handle");
     return {
-        values, writes, intervals, host, player, handle, document, window,
+        values, writes, intervals, host, player, handle, document, window, requests,
         flush: () => new Promise(resolve => setImmediate(resolve)),
         width: () => Number(handle.getAttribute("aria-valuenow")),
         dragStart(x = 973) { handle.emit("pointerdown", { button: 0, isPrimary: true, pointerId: 1, clientX: x }); },
@@ -114,5 +114,12 @@ function boot(saved = {}) {
     t = boot({ "video.danmakuFont": "unknown", "video.danmakuFontSize": "22" }); await t.flush();
     assert.equal(t.host.props.get("--bilibiliex-danmaku-font-size"), "14px");
     assert.match(t.host.props.get("--bilibiliex-danmaku-font"), /system-ui/); t.hide();
+    for (const suffix of ["", "/"]) {
+        t = boot({}, `https://www.bilibili.com/list/watchlater${suffix}?oid=117523827725893&bvid=BV1Gqsf6JELS&spm_id_from=333.1365.top_right_bar_window_view_later.content.click&vd_source=0004b96e5a1ffeb80fe14526d7fb8280`);
+        await t.flush();
+        assert.equal(t.host.hidden, false);
+        assert.equal(new URL(t.requests[0]).searchParams.get("bvid"), "BV1Gqsf6JELS");
+        t.hide();
+    }
     console.log("Passed: simulated pointer resize, save-on-release, cancellation, keyboard/reset, reload persistence, viewport clamps and cleanup.");
 })().catch(error => { console.error(error); process.exitCode = 1; });

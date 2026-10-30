@@ -68,3 +68,9 @@ fixture 已改成原生的“固定外层 + 相对内层”，保留原网页背
 新增独立存储 video.danmakuFont 和 video.danmakuFontSize，字体使用固定选项映射到本地字体栈，字号为 12–32px 整数，默认系统字体和 14px。非法旧存储回退或限制到范围内。样式仅作用于侧栏滚动区，保留标题栏大小。设置中的文字预览不写入存储，随原有保存刷新流程统一写入；取消和关闭丢弃预览。
 
 运行 node tests/bilibili-appearance.test.cjs 检查设置默认值、实时预览不保存、取消/关闭、保存刷新、重新读取和非法存储；宽度测试补充实际侧栏字体变量应用。均为模拟检查，未代替真实页面字体显示验证。
+
+## 1.8.1 无斜杠的稍后观看查询链接（2026-10-30）
+
+用户反馈 /list/watchlater?oid=117523827725893&bvid=BV1Gqsf6JELS 未识别。内部 pathname 判断原本接受无斜杠形式；油猴元数据仅匹配精确 /list/watchlater 或 /list/watchlater/*，缺少无斜杠加查询参数形式。按 [匹配规则的 path 定义](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Match_patterns#path)，匹配包含路径和查询串。因此补充精确路径加 ?* 的规则，不使用 watchlater* 扩大到相似名称路径。
+
+新增 node tests/bilibili-url-match.test.cjs 模拟元数据匹配，验证反馈完整链接在原规则下不匹配、补充后匹配，以及参数顺序、斜杠、片段和负例。侧栏模拟补充两种稍后观看路径，确认从 bvid 读取正确视频编号；自动全屏路由检查补充无斜杠形式，T 键已有两种路径覆盖。原有语法、字体设置、弹幕、宽度及直播检查通过。浏览工具未能访问反馈页面，没有声称真实登录环境或已安装油猴验证通过。
