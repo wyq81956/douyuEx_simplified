@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DouyuEX精简版
 // @namespace    douyuex-simplified
-// @version      1.5.8
+// @version      1.5.9
 // @updateURL    https://github.com/wyq81956/douyuEx_simplified/releases/latest/download/douyuEx_simplified.user.js
 // @downloadURL  https://github.com/wyq81956/douyuEx_simplified/releases/latest/download/douyuEx_simplified.user.js
 // @description  自动网页全屏、最高画质、简洁模式；屏蔽刀塔助手、调整弹幕池、滚轮调音量、下播不跳转、关注页过滤、右键镜像和旋转画面。
@@ -553,7 +553,7 @@
             .LadderNav, #js-bottom-right-recommendAd, .aside-top-uspension-box,
             .werbungContainer__2sv7h, #js-player-asideTopSuspension,
             .Search-Panel-Advert, .DiamondThanksgivingPushGameDialog,
-            .RechangeJulyPopups { display: none !important; }
+            .RechangeJulyPopups, .ActivityDiamondFansDiscountTips { display: none !important; }
             /* 填补弹幕区顶部广告隐藏后的空位。 */
             #js-player-asideMain { top: 0 !important; }
         `);

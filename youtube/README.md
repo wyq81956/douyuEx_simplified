@@ -4,7 +4,7 @@
 
 ## 安装
 
-在 Tampermonkey 中新建脚本，用 [youtubeex.user.js](youtubeex.user.js) 的完整内容覆盖默认代码并保存，然后刷新 YouTube。当前供本地安装，尚未发布 Release 自动更新地址。
+打开 [正式版安装链接](https://github.com/wyq81956/douyuEx_simplified/releases/latest/download/youtubeex.user.js) 在 Tampermonkey 中安装；也可用 [youtubeex.user.js](youtubeex.user.js) 的完整内容覆盖脚本编辑器代码并保存，然后刷新 YouTube。当前版本已提供正式 Release 安装附件，尚未配置显式自动更新地址。
 
 ## 使用
 
