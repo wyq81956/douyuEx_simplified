@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         B站动态 - 屏蔽悬浮用户资料卡
 // @namespace    bilibiliex-simplified
-// @version      1.8.1
+// @version      1.9.0
 // @updateURL    https://github.com/wyq81956/douyuEx_simplified/releases/latest/download/bilibiliex.user.js
 // @downloadURL  https://github.com/wyq81956/douyuEx_simplified/releases/latest/download/bilibiliex.user.js
 // @description  动态页屏蔽资料卡；视频网页全屏右侧同步弹幕池；T键切换网页全屏；直播间自动网页模式和最高画质、隐藏弹幕等级和粉丝牌及特殊称号、隐藏弹幕池顶部。
@@ -11,6 +11,8 @@
 // @match        https://www.bilibili.com/list/watchlater/*
 // @match        https://www.bilibili.com/list/watchlater
 // @match        https://www.bilibili.com/list/watchlater?*
+// @match        https://www.bilibili.com/bangumi/play/ep*
+// @match        https://www.bilibili.com/bangumi/play/ss*
 // @match        https://live.bilibili.com/*
 // @run-at       document-start
 // @noframes
@@ -54,9 +56,11 @@
     const liveQuality = GM_getValue(SETTINGS.liveQuality, true);
     const webFullscreenHotkey = GM_getValue(SETTINGS.webFullscreenHotkey, true);
     const videoDanmakuPanel = GM_getValue(SETTINGS.videoDanmakuPanel, true);
+    const BANGUMI_PLAY_PATH = /^\/bangumi\/play\/((?:ep|ss)\d+)\/?$/;
     const isVideoPage = window.location.hostname === "www.bilibili.com"
         && (window.location.pathname.startsWith("/video/")
-            || /^\/list\/watchlater\/?$/.test(window.location.pathname));
+            || /^\/list\/watchlater\/?$/.test(window.location.pathname)
+            || BANGUMI_PLAY_PATH.test(window.location.pathname));
     const isLivePage = window.location.hostname === "live.bilibili.com"
         && /^\/(?:blanc\/)?\d+\/?$/.test(window.location.pathname);
 
@@ -348,6 +352,14 @@
         function videoKey() {
             const url = new URL(window.location.href);
             if (url.hostname !== "www.bilibili.com") return null;
+            const bangumiId = url.pathname.match(BANGUMI_PLAY_PATH)?.[1];
+            if (bangumiId) {
+                // 季度地址可能从历史进度播放。用页面标注的当前单集，不默认选第一集。
+                const episodeId = bangumiId.startsWith("ep") ? bangumiId.slice(2)
+                    : document.querySelector('link[rel="canonical"]')?.href
+                        ?.match(/^https:\/\/www\.bilibili\.com\/bangumi\/play\/ep(\d+)\/?(?:[?#].*)?$/)?.[1];
+                return episodeId ? { episodeId, key: `ep${episodeId}` } : null;
+            }
             const match = url.pathname.match(/^\/video\/(BV[\da-z]+|av\d+)\/?$/i);
             const id = match?.[1] || (/^\/list\/watchlater\/?$/.test(url.pathname) ? url.searchParams.get("bvid") : null);
             if (!id || !/^(?:BV[\da-z]+|av\d+)$/i.test(id)) return null;
@@ -563,14 +575,27 @@
             shadow.querySelector("ol").replaceChildren();
             emptyMessage("正在读取弹幕…");
             try {
-                const query = /^av/i.test(route.id) ? `aid=${route.id.slice(2)}` : `bvid=${route.id}`;
-                const result = await request(`https://api.bilibili.com/x/web-interface/view?${query}`, "json", current);
+                let metadataUrl;
+                if (route.episodeId) {
+                    metadataUrl = `https://api.bilibili.com/pgc/view/web/season?ep_id=${route.episodeId}`;
+                } else {
+                    const query = /^av/i.test(route.id) ? `aid=${route.id.slice(2)}` : `bvid=${route.id}`;
+                    metadataUrl = `https://api.bilibili.com/x/web-interface/view?${query}`;
+                }
+                const result = await request(metadataUrl, "json", current);
                 if (stopped || session !== current) return;
                 if (result.code !== 0) throw new Error("Video metadata unavailable");
-                const part = result.data?.pages?.find(item => item.page === route.part);
+                let part;
+                if (route.episodeId) {
+                    const isCurrentEpisode = item => String(item.id) === route.episodeId;
+                    part = result.result?.episodes?.find(isCurrentEpisode)
+                        ?? result.result?.section?.flatMap(group => group.episodes || []).find(isCurrentEpisode);
+                } else {
+                    part = result.data?.pages?.find(item => item.page === route.part);
+                }
                 if (!part || !/^\d+$/.test(String(part.cid)) || Number(part.cid) <= 0) throw new Error("Video part unavailable");
                 current.cid = part.cid;
-                current.duration = Number(part.duration) || 0;
+                current.duration = (Number(part.duration) || 0) / (route.episodeId ? 1000 : 1);
                 render(true);
             } catch {
                 if (!stopped && session === current) {

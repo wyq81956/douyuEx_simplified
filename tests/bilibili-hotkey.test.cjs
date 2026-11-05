@@ -101,7 +101,7 @@ function boot(options = {}) {
 
 (async () => {
     let t;
-    for (const pathname of ["/video/BVtest/", "/list/watchlater/", "/list/watchlater"]) {
+    for (const pathname of ["/video/BVtest/", "/list/watchlater/", "/list/watchlater", "/bangumi/play/ep31734", "/bangumi/play/ss1722/"]) {
         t = boot({ pathname });
         assert.ok((await t.press()).defaultPrevented);
         assert.equal(t.state.mode, "web");

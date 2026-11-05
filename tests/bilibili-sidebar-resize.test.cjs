@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs"), path = require("node:path"), vm = require("node:vm");
 const source = fs.readFileSync(path.join(__dirname, "../bilibili/bilibiliex.user.js"), "utf8");
 
-function boot(saved = {}, href = "https://www.bilibili.com/video/BVfixture/") {
+function boot(saved = {}, href = "https://www.bilibili.com/video/BVfixture/", canonicalHref) {
     let viewport = 1280;
     const intervals = new Map(), writes = [], keys = "video.danmakuPanelWidth";
     const values = { ...saved }, requests = [];
@@ -44,7 +44,8 @@ function boot(saved = {}, href = "https://www.bilibili.com/video/BVfixture/") {
     const document = new Element(), window = new Element();
     document.body = new Element(); document.documentElement = new Element();
     document.visibilityState = "visible"; document.fullscreenElement = null;
-    document.querySelector = () => player;
+    document.querySelector = selector => selector === 'link[rel="canonical"]'
+        ? (canonicalHref ? { href: canonicalHref } : null) : player;
     document.createElement = tag => new Element(tag);
     document.createDocumentFragment = () => new Element("fragment");
     window.location = new URL(href);
@@ -56,13 +57,23 @@ function boot(saved = {}, href = "https://www.bilibili.com/video/BVfixture/") {
         GM_setValue: (key, value) => { values[key] = value; writes.push([key, value]); },
         GM_registerMenuCommand() {}, GM_addStyle() {},
         setInterval: fn => { intervals.set(1, fn); return 1; }, clearInterval: id => intervals.delete(id),
-        fetch: async url => { requests.push(url); return { ok: true, headers: { get: () => "application/octet-stream" },
-            json: async () => ({ code: 0, data: { pages: [{ page: 1, cid: 11, duration: 780 }] } }),
-            arrayBuffer: async () => new ArrayBuffer(0) }; },
+        fetch: async url => {
+            requests.push(new URL(url));
+            return {
+                ok: true, headers: { get: () => "application/octet-stream" },
+                json: async () => url.includes("/pgc/view/web/season")
+                    ? { code: 0, result: {
+                        episodes: [{ id: 31734, cid: 21, duration: 780000 }],
+                        section: [{ episodes: [{ id: 31735, cid: 22, duration: 355000 }] }],
+                    } }
+                    : { code: 0, data: { pages: [{ page: 1, cid: 11, duration: 780 }] } },
+                arrayBuffer: async () => new ArrayBuffer(0),
+            };
+        },
     });
     const host = document.body.children[0], handle = host.shadow.querySelector(".resize-handle");
     return {
-        values, writes, intervals, host, player, handle, document, window, requests,
+        values, writes, intervals, host, player, handle, document, window, requests, video,
         flush: () => new Promise(resolve => setImmediate(resolve)),
         width: () => Number(handle.getAttribute("aria-valuenow")),
         dragStart(x = 973) { handle.emit("pointerdown", { button: 0, isPrimary: true, pointerId: 1, clientX: x }); },
@@ -118,8 +129,21 @@ function boot(saved = {}, href = "https://www.bilibili.com/video/BVfixture/") {
         t = boot({}, `https://www.bilibili.com/list/watchlater${suffix}?oid=117523827725893&bvid=BV1Gqsf6JELS&spm_id_from=333.1365.top_right_bar_window_view_later.content.click&vd_source=0004b96e5a1ffeb80fe14526d7fb8280`);
         await t.flush();
         assert.equal(t.host.hidden, false);
-        assert.equal(new URL(t.requests[0]).searchParams.get("bvid"), "BV1Gqsf6JELS");
+        assert.equal(t.requests[0].searchParams.get("bvid"), "BV1Gqsf6JELS");
         t.hide();
     }
+    const bangumi = "https://www.bilibili.com/bangumi/play/";
+    t = boot({}, bangumi + "ss1722", bangumi + "ep31735"); await t.flush();
+    assert.equal(t.requests[0].searchParams.get("ep_id"), "31735");
+    assert.equal(t.requests[1].searchParams.get("oid"), "22");
+    t.video.currentTime = 340; t.video.emit("timeupdate"); await t.flush();
+    assert.equal(t.requests.length, 2); // 355 秒已是最后一段，不能把 355000 毫秒当作秒来预取。
+    t.video.currentTime = 0;
+    t.window.location = new URL(bangumi + "ep31734?from=next");
+    for (const monitor of t.intervals.values()) monitor();
+    await t.flush();
+    assert.equal(t.requests[2].searchParams.get("ep_id"), "31734");
+    assert.equal(t.requests[3].searchParams.get("oid"), "21");
+    t.hide();
     console.log("Passed: simulated pointer resize, save-on-release, cancellation, keyboard/reset, reload persistence, viewport clamps and cleanup.");
 })().catch(error => { console.error(error); process.exitCode = 1; });

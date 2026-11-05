@@ -22,6 +22,8 @@ for (const href of [
     "https://www.bilibili.com/list/watchlater", "https://www.bilibili.com/list/watchlater/",
     "https://www.bilibili.com/list/watchlater#player",
     "https://www.bilibili.com/video/BV1Gqsf6JELS/?p=2",
+    "https://www.bilibili.com/bangumi/play/ep31734?spm_id_from=333.1007",
+    "https://www.bilibili.com/bangumi/play/ss1722/",
     "https://live.bilibili.com/544618", "https://t.bilibili.com/",
 ]) assert.equal(included(href), true, href);
 for (const href of [
@@ -29,5 +31,6 @@ for (const href of [
     "https://www.bilibili.com/list/watchlater2?bvid=BV1Gqsf6JELS",
     "https://www.bilibili.com/", "https://example.com/list/watchlater?bvid=BV1Gqsf6JELS",
     "http://www.bilibili.com/list/watchlater?bvid=BV1Gqsf6JELS",
+    "https://www.bilibili.com/bangumi/media/md1722",
 ]) assert.equal(included(href), false, href);
 console.log("Passed: reported watchlater URL, query order, trailing slash, fragments, old routes and unrelated URL exclusions (metadata simulation).");
